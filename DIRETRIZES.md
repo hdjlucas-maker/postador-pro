@@ -62,6 +62,7 @@ src/
   security.js          CSRF, verificação de origem, rate limit, sanitização
   email.js             SMTP: recuperação de senha e confirmação de pagamento
   cron-agenda.js       intervalo em minutos -> expressão cron válida
+  navegador.js         abertura do Chromium (Chrome do puppeteer ou CHROME_PATH)
   queue.js             agrupamento, concorrência por conta, retentativas
   facebook.js          perfis isolados, ciclo de vida, janela de login
   postador.js          EXECUTOR: digita, rola, publica no grupo
@@ -79,7 +80,7 @@ src/
 public/                index.html, termos.html, privacidade.html, assets/
 data/                  bancos, perfis, uploads, backups (NÃO versionar)
 tests/smoke.test.js    69 verificações
-scripts/               check-syntax.js, check-modulos.js
+scripts/               check-syntax.js, check-modulos.js, testar-navegador.js
 ```
 
 ### Fluxo de uma publicação (não quebrar)
@@ -197,10 +198,12 @@ ainda não foi validada contra o Facebook — é a pendência nº 1 da seção 8
 
 ## 7. Estado do git
 
-- `src/`, `public/`, `tests/`, `scripts/` **ainda não versionados** — estão
-  como untracked. Precisam de `git add` quando você decidir commitar.
-- `.env` não é versionado (confirmei).
-- Nada foi commitado. A decisão de commitar é sua.
+- Commit `e251cfd` em `main`, enviado para `origin/main`.
+- `.env` e `data/` **não** são versionados (`.gitignore`).
+- `.gitattributes` força LF em tudo. Sem ele os scripts bash iam para a VPS
+  com CRLF e o servidor falharia com `bad interpreter: /bin/bash^M`.
+- Ao commitar, confira sempre com `git status --porcelain` que nenhum `.env`,
+  `data/` ou `*.db` entrou na lista.
 
 ---
 
@@ -209,9 +212,20 @@ ainda não foi validada contra o Facebook — é a pendência nº 1 da seção 8
 Ordenadas por impacto. Nada aqui é "refatoração" — é o que falta para o
 produto funcionar com cliente de verdade.
 
-1. **Publicação real não validada.** Não há Chrome no ambiente de teste. É
-   preciso uma máquina com navegador para confirmar que um post sai num grupo
-   de verdade. É o maior risco restante.
+1. **Publicação real ainda não confirmada.** O navegador sobe, navega e digita
+   de verdade (validado com `node scripts/testar-navegador.js`: Chrome 153,
+   navegação e digitação conferidas). O executor também foi exercitado contra
+   uma cópia local do compositor: chegou a abrir o editor, clicar em
+   "Escreva algo..." e digitar o texto, mas o teste parou na etapa de anexo de
+   imagem. O que falta é confirmar com uma conta e um grupo de teste reais que
+   o DOM do Facebook bate com os seletores:
+   - `div[role="button"]::-p-text(Escreva algo...)`
+   - `div[role="textbox"]`
+   - `div[aria-label="Foto/vídeo"]` (com acento)
+   - `div[aria-label="Publicar"]`
+   **Atenção:** se o seletor divergir, a falha aparece como "O editor de
+   publicação não apareceu neste destino", que é genérica demais. Ao testar com
+   conta real, guarde o print da tela.
 2. **Revisão jurídica** de `public/termos.html` e `public/privacidade.html`.
    São rascunhos. Automação de Facebook e publicação em grupos têm
    implicações de responsabilidade que um advogado precisa avaliar.
@@ -222,7 +236,29 @@ produto funcionar com cliente de verdade.
 5. **Backup externo.** O backup automático grava em `data/backups`, na mesma
    máquina. Um provedor ou RAID ou nada. Sem isso, a recuperação não existe.
 6. **Decidir o destino dos dados antigos** que estavam na raiz (não há mais
-   lá, mas se existedm em algum backup, precisam de migração).
+   lá, mas se existirem em algum backup, precisam de migração).
+
+### Sobre o navegador
+
+O download do Chromium do puppeteer falhou nesta máquina (a pasta
+`win64-148.0.7778.97` ficou vazia). Por isso existe `CHROME_PATH`: aponte para
+um Chrome já instalado e o app usa ele.
+
+```bash
+# Windows
+CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
+# Linux
+CHROME_PATH=/usr/bin/google-chrome
+```
+
+`config.js` recusa o boot se o caminho não existir, em vez de falhar no meio
+de uma publicação. Depois de uma tentativa de download interrompida, apague a
+pasta antes de tentar de novo:
+
+```bash
+rm -rf ~/.cache/puppeteer/chrome/win64-148.0.7778.97
+npx puppeteer browsers install chrome
+```
 
 ---
 

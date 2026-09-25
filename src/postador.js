@@ -1,9 +1,9 @@
 'use strict';
 
 const path = require('path');
-const puppeteer = require('puppeteer');
 const config = require('./config');
 const log = require('./log');
+const { abrirNavegador } = require('./navegador');
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const esperar = (min, max) => sleep(Math.floor(Math.random() * (max - min + 1) + min) * 1000);
@@ -137,16 +137,7 @@ async function dispararPostagens({ posts }) {
   const resultados = [];
 
   try {
-    browser = await puppeteer.launch({
-      headless: false,
-      userDataDir: pastaPerfilIsolado,
-      args: [
-        '--disable-notifications',
-        '--disable-blink-features=AutomationControlled',
-        '--no-sandbox',
-        '--start-maximized'
-      ]
-    });
+    browser = await abrirNavegador(pastaPerfilIsolado);
 
     for (let i = 0; i < posts.length; i++) {
       const post = posts[i];

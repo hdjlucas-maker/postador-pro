@@ -50,6 +50,11 @@ const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT
 const INFINITEPAY_HANDLE = String(process.env.INFINITEPAY_HANDLE || '').trim();
 const INFINITEPAY_API = process.env.INFINITEPAY_API || 'https://api.checkout.infinitepay.io';
 
+// Navegador do executor. Vazio = usar o Chromium que o puppeteer baixou.
+// Preencha quando a máquina já tem um Chrome/Chromium instalado, ou quando o
+// download do navegador falhar por falta de internet.
+const CHROME_PATH = String(process.env.CHROME_PATH || '').trim();
+
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT_DIR, 'data'));
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const PROFILES_DIR = path.join(DATA_DIR, 'facebook-profiles');
@@ -137,6 +142,7 @@ const config = {
   CSRF_HEADER,
   INFINITEPAY_HANDLE,
   INFINITEPAY_API,
+  CHROME_PATH,
   TRUST_PROXY,
   DATA_DIR,
   UPLOADS_DIR,
@@ -201,6 +207,10 @@ function validarConfig() {
 
   if (EXPOSIR_LINK_REDEFINICAO) {
     avisos.push('EXPOSIR_LINK_REDEFINICAO ligado: a API devolve o link de redefinição de senha. Nunca use fora de desenvolvimento.');
+  }
+
+  if (CHROME_PATH && !fs.existsSync(CHROME_PATH)) {
+    problemas.push(`CHROME_PATH aponta para um arquivo que não existe: ${CHROME_PATH}.`);
   }
 
   if (DELAY_ENTRE_POSTS_MAX < DELAY_ENTRE_POSTS_MIN) {

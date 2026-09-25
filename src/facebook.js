@@ -2,9 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer');
 const config = require('./config');
 const log = require('./log');
+const { abrirNavegador } = require('./navegador');
 
 const navegadores = new Map();
 
@@ -44,17 +44,7 @@ async function abrirNavegadorFacebook(accountId, userId) {
   const dir = profileDir(userId, accountId);
   fs.mkdirSync(dir, { recursive: true });
 
-  const browser = await puppeteer.launch({
-    headless: false,
-    userDataDir: dir,
-    defaultViewport: null,
-    args: [
-      '--start-maximized',
-      '--no-sandbox',
-      '--disable-notifications',
-      '--disable-blink-features=AutomationControlled'
-    ]
-  });
+  const browser = await abrirNavegador(dir, { defaultViewport: null });
 
   const registro = { browser, dir, userId, accountId, abertoEm: Date.now(), ultimoUso: Date.now() };
   navegadores.set(k, registro);
