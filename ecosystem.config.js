@@ -6,7 +6,7 @@ module.exports = {
       name: 'postador-pro',
       script: 'server.js',
       instances: 1,
-      max_memory_restart: '500M',
+      max_memory_restart: '2G',
       env: {
         NODE_ENV: 'production',
         DISPLAY: ':99'
