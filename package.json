@@ -1,0 +1,22 @@
+{
+  "name": "postador-pro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Central de campanhas com avaliação de 7 dias, contas Facebook e assinatura via InfinitePay",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "nedb-promises": "^6.2.3",
+    "puppeteer": "^24.20.0",
+    "node-cron": "^4.2.1"
+  }
+}

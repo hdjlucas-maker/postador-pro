@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.db
+*.db~
+sessions.db
+users.db
+payments.db
+posts.db
+campaigns.db
+facebook-accounts.db
+facebook-profiles/
+uploads/
