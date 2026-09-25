@@ -1,49 +1,93 @@
-# Postador Pro — primeira versão comercial
+# Postador Pro
 
-## Arquivos
+Ferramenta de publicação em grupos do Facebook, com login manual por perfil
+isolado do navegador, fila de execução, cobrança via InfinitePay e painel
+administrativo. Multi-tenant: cada conta tem seus próprios perfis, campanhas,
+uploads e histórico, e só enxerga os próprios dados.
 
-- `index.html` — interface, login, dashboard, campanhas, contas Facebook e assinatura.
-- `server.js` — autenticação, trial, banco, campanhas, pagamentos, webhook e fila de execução.
-- `facebook.js` — abre perfis isolados do navegador para o login manual do Facebook.
-- `package.json` — dependências.
-- `.env.example` — configurações.
-- `.gitignore` — evita publicar bancos e credenciais.
+## Como funciona
 
-## Instalação
+O usuário conecta uma conta do Facebook, cria uma campanha com texto, imagens,
+destinos e horário, e o servidor executa a publicação mais tarde, no perfil
+navegador que ele mesmo conectou. O aplicativo nunca recebe a senha do
+Facebook: o login acontece na janela do Chromium.
 
-```powershell
+## Estrutura
+
+```
+server.js              boot: HTTP, fila, agendamentos, shutdown
+src/
+  app.js               middlewares e criação do Express
+  http.js              cookies, cabeçalhos de segurança, CSP
+  config.js            leitura do .env, planos, limites, validação
+  db.js                NeDB, índices, compactação, backup
+  auth.js              sessões, senha, tokens de redefinição
+  security.js          CSRF, origem, rate limit, sanitização
+  log.js               log JSON estruturado
+  cron-agenda.js       intervalo em minutos -> expressão cron válida
+  queue.js             agrupamento, concorrência, retentativas
+  facebook.js          perfis isolados e ciclo de vida dos navegadores
+  executor.js          digitação, rolagem e publicação no Facebook
+  billing.js           checkout, webhook, idempotência
+  routes/              auth, campanhas, contas, cobrança, admin, páginas
+public/                interface, termos e privacidade
+data/                  bancos, perfis, uploads e backups (nunca versionado)
+tests/smoke.test.js    suíte de fumaça
+scripts/               verificações de sintaxe e de chamadas entre módulos
+```
+
+## Instalação local
+
+```bash
 npm install
-```
-
-Copie `.env.example` para `.env` e preencha:
-
-```text
-INFINITEPAY_HANDLE=sua_infinite_tag
-PUBLIC_BASE_URL=https://seu-dominio.com
-```
-
-Para testar apenas localmente:
-
-```text
-PUBLIC_BASE_URL=http://localhost:3000
-```
-
-Depois:
-
-```powershell
+cp .env.example .env
 npm start
 ```
 
-Acesse `http://localhost:3000`.
+Acesse `http://localhost:3000`. Rode `npm start` sem `INFINITEPAY_HANDLE` para
+trabalhar com o checkout desativado; o resto do app funciona normalmente.
+
+O Chromium do puppeteer é baixado automaticamente. Se faltar:
+
+```bash
+npx puppeteer browsers install chrome
+```
+
+## Verificação
+
+```bash
+npm run lint   # sintaxe de todos os arquivos + chamadas entre módulos
+npm test       # suíte de fumaça
+```
+
+A suíte sobe o app no próprio processo, com diretório de dados temporário, e
+cobre autenticação, isolamento entre usuários, limites de plano, CSRF, origem,
+exposição de arquivos, upload, fila, cobrança e admin.
+
+> **Antes de alterar o projeto, leia [`DIRETRIZES.md`](DIRETRIZES.md).**
+> Ele registra as regras inegociáveis, a arquitetura atual, as correções já
+> feitas e as pendências que faltam para a venda.
+
+## Configuração
+
+Todas as variáveis estão documentadas e comentadas em `.env.example`. As que
+mais costumam ser esquecidas:
+
+| Variável | Por quê importa |
+|---|---|
+| `PUBLIC_BASE_URL` | Endereço usado no link de redefinição e na validação de origem. Precisa ser HTTPS em produção. |
+| `TRUST_PROXY` | Quantos proxies vêm antes do Node. Sem isso o rate limit enxerga o IP do proxy e o cookie Secure sai errado. |
+| `SMTP_*` | Sem SMTP o app **não sobe** em produção: o cliente não conseguiria recuperar a senha. |
+| `ADMIN_EMAILS` | Sem isso ninguém entra em `/admin`. |
+| `INFINITEPAY_HANDLE` | Sem isso o checkout responde que o pagamento está indisponível. |
+| `DATA_DIR` | Banco, perfis e uploads. Faça backup deste diretório. |
+| `MAX_NAVEGADORES_CONCORRENTES` | Cada navegador é um Chromium headful. Dimensione pela RAM da máquina. |
+
+O servidor valida a configuração no boot: um problema (como SMTP ausente em
+produção) impede a inicialização em vez de falhar mais tarde, no meio de uma
+publicação.
 
 ## Planos
-
-- Mensal: R$ 25,00
-- Anual: R$ 249,00
-
-A conta recebe 7 dias de avaliação no cadastro. O prazo fica armazenado no banco da conta, não no navegador.
-
-Limites por plano (aplicados no servidor):
 
 | Recurso | Avaliação (trial) | Assinante (pro) |
 |---|---|---|
@@ -51,46 +95,63 @@ Limites por plano (aplicados no servidor):
 | Campanhas ativas | 3 | 200 |
 | Destinos por campanha | 20 | 100 |
 
-## InfinitePay
+Todo cadastro começa com 7 dias de avaliação, guardados no banco da conta.
+Preços e limites são ajustáveis por ambiente (`PLAN_*_PRICE`, `LIMIT_*`).
 
-O servidor cria o checkout em `https://api.checkout.infinitepay.io/links` e recebe a confirmação em:
+## Cobrança (InfinitePay)
 
-`POST /api/webhooks/infinitepay`
+O checkout é criado em `https://api.checkout.infinitepay.io/links` e a
+confirmação chega em `POST /api/webhooks/infinitepay`.
 
-Em produção, `PUBLIC_BASE_URL` precisa ser uma URL pública HTTPS para a InfinitePay conseguir chamar o webhook.
+A aplicação do pagamento é idempotente: o registro é reivindicado com uma
+escrita condicional, de modo que dois webhooks simultâneos não concedem a
+mesma compra duas vezes. Renovações acumulam sobre a data atual.
 
-## Facebook
+## Publicação
 
-O botão `Conectar Facebook` abre uma janela do Chromium com um perfil separado. O usuário faz o login diretamente no Facebook. O Postador não solicita a senha do Facebook no formulário da aplicação.
+As publicações de uma mesma conta são agrupadas e executadas na mesma sessão
+do navegador, com cadência de digitação variável, rolagem antes de escrever e
+espera aleatória entre postagens. A fila reprocessa o que falhou até
+`MAX_TENTATIVAS` e, ao reiniciar o servidor, retoma o que ficou pendente.
 
-A integração do executor existente (`postador.js`) precisa reutilizar o mesmo diretório de perfil retornado por `facebook.js` para aproveitar a sessão conectada.
+Erros permanentes (sessão expirada, perfil sem acesso, elemento não
+encontrado) não são repetidos: repetir não resolve. Erros de infraestrutura
+entram em retentativa com espera crescente.
 
-Para desconectar uma conta, acesse **Contas Facebook → Desconectar**. A janela é fechada, o perfil local é removido e o limite de contas do plano é liberado.
+O Chromium é aberto em modo headful. Em servidor Linux sem monitor, é
+obrigatório um display virtual (Xvfb) — o `deploy-vps.sh` instala e habilita o
+Xvfb como serviço.
 
-## Histórico
+## Produção
 
-O histórico é paginado (`/api/history?page=1&perPage=25&accountId=...`) e pode ser filtrado por conta. O CSV (`/api/history/export.csv`) respeita o mesmo filtro `accountId`.
+```bash
+bash deploy-vps.sh <dominio> <email_admin> <infinitepay_handle>
+```
 
-## Executor (anti-bot)
+O script instala Node, as bibliotecas do Chromium, PM2, cloudflared e o Xvfb;
+depois exige que o SMTP seja preenchido no `.env` antes de o app conseguir
+subir. Para atualizar uma instalação existente, use `bash update.sh`, que faz
+backup antes do `git pull` e valida a configuração antes de reiniciar.
 
-O servidor agrupa as publicações de uma mesma conta e as executa na mesma sessão do navegador:
+Pontos que importam em produção:
 
-- Cadência de digitação variável (pausas humanas).
-- Rolagem natural antes de escrever e publicar.
-- Espera aleatória entre postagens da mesma conta.
-- Verifica login apenas na primeira postagem do grupo.
+1. **HTTPS é obrigatório.** Com `PUBLIC_BASE_URL` em http o cookie de sessão
+   não sai com `Secure`, e o link de redefinião chega errado ao cliente.
+2. **`instances: 1` no PM2 é obrigatório.** A fila e a reserva de cobrança
+   idempotente vivem na memória do processo. Duas instâncias poderiam
+   publicar a mesma campanha em paralelo e liberar a mesma compra duas vezes.
+3. **Nunca versionar `data/`.** Contém sessões, e-mails, hashes de senha e os
+   perfis do navegador. O backup automático grava em `data/backups`; copie
+   esse diretório para fora da máquina.
+4. **O backup só roda com `NODE_ENV=production`**, na cadência de
+   `BACKUP_MINUTOS`. O log de boot mostra a expressão gerada, no campo
+   `agendamentos`.
+5. Logs são JSON estruturados. Os eventos úteis: `http`, `servidor_iniciado`,
+   `agendamentos`, `publicacao_sucesso`, `publicacao_falha`, `infinitepay_*`.
 
-Ajustes via ambiente: `CADENCIA_MIN_MS`, `CADENCIA_MAX_MS`, `DELAY_ENTRE_POSTS_MIN`, `DELAY_ENTRE_POSTS_MAX`.
+## Privacidade e termos
 
-## Importante para produção
-
-1. Colocar o servidor atrás de HTTPS (Nginx/Caddy/Cloudflare). Em `PUBLIC_BASE_URL` use a URL https do domínio — com HTTPS os cookies saem com `Secure`.
-2. Ao usar proxy reverso, defina `TRUST_PROXY` (ex.: `TRUST_PROXY=1` para um único proxy) para o servidor enxergar o IP real e o esquema HTTP correto do cliente.
-3. Configurar a InfinitePay e testar o webhook (`POST /api/webhooks/infinitepay`).
-4. Revisar as permissões e regras atuais da Meta para os destinos de publicação usados pela ferramenta.
-5. Não publicar `.env` nem os bancos `.db`.
-6. Gerenciar o processo com PM2 ou systemd e monitorar os logs JSON estruturados emitidos pelo servidor (eventos `http`, `publicacao_sucesso`, `publicacao_falha`, `infinitepay_*`).
-
-## Executor existente
-
-Mantenha seu `postador.js` na mesma pasta. O servidor chama `dispararPostagens({ posts })` para cada grupo de destinos de uma conta. O objeto de cada post já inclui `grupoUrl`, `perfilId`, `accountId` e `profileDir` da conta conectada.
+`public/termos.html` e `public/privacidade.html` são rascunhos. A ferramenta
+automatiza o navegador do próprio usuário e publica em grupos do Facebook: os
+dois textos precisam ser revisados por um advogado antes da venda, e o
+operador precisa conferir as regras da Meta para os destinos usados.

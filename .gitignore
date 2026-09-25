@@ -1,7 +1,17 @@
+# Dependências
 node_modules/
+
+# Segredos e configuração local
 .env
+.env.local
+.env.*.local
+
+# Dados do servidor: banco, perfis do Facebook, uploads e backups.
+# NADA aqui pode ser versionado — contém sessões, e-mails e senhas (hash).
+data/
 *.db
 *.db~
+*.db.lock
 sessions.db
 users.db
 payments.db
@@ -10,3 +20,16 @@ campaigns.db
 facebook-accounts.db
 facebook-profiles/
 uploads/
+backups/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

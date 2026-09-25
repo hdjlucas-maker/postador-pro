@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Deploy do Postador Pro em VPS Ubuntu/Debian.
 #
-# Uso (na VPS, após clonar o repo):
-#   bash deploy-vps.sh <dominio> <email>
+# Uso (na VPS, após clonar o repositório):
+#   bash deploy-vps.sh <dominio> <email_admin> <infinitepay_handle>
 #
 # Exemplo:
-#   bash deploy-vps.sh postador.seudominio.com voce@email.com
+#   bash deploy-vps.sh postador.seudominio.com voce@email.com sua_infinite_tag
 
 set -euo pipefail
 
 DOMINIO="${1:?Informe o domínio público (ex.: postador.seudominio.com)}"
+EMAIL_ADMIN="${2:?Informe o e-mail que será administrador}"
+HANDLE="${3:?Informe sua InfiniteTag (sem o \$)}"
+
 REPO_DIR="$HOME/postador-pro"
 
 echo "==> [1/7] Atualizando o sistema"
@@ -24,11 +27,14 @@ fi
 echo "node: $(node -v) | npm: $(npm -v)"
 
 echo "==> [3/7] Dependências do Chromium (puppeteer) + Xvfb (display virtual)"
+# Sem estas bibliotecas o Chromium abre e morre na hora, e a fila de publicação
+# fica repetindo a mesma falha indefinidamente.
 sudo apt-get install -y \
   xvfb \
   libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
   libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 \
-  libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 fonts-liberation
+  libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 fonts-liberation \
+  libu2f-udev xdg-utils
 
 echo "==> [4/7] PM2 + cloudflared"
 sudo npm install -g pm2
@@ -58,19 +64,27 @@ sudo systemctl enable --now xvfb
 
 echo "==> [6/7] Instalando o app"
 cd "$REPO_DIR"
-npm install --omit=dev
+if [ -f package-lock.json ]; then
+  npm ci --omit=dev
+else
+  npm install --omit=dev
+fi
 
-# Garante o Chromium baixado pelo puppeteer
+# O Chromium do puppeteer fica fora do node_modules e precisa ser baixado.
 npx puppeteer browsers install chrome
+
+mkdir -p data/backups logs
 
 if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
+# Ajusta o que depende do domínio e da instalação. O resto (SMTP, planos,
+# limites) fica para o operador preencher no passo final.
 sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://$DOMINIO|" .env
-if ! grep -q '^TRUST_PROXY=' .env; then
-  echo "TRUST_PROXY=1" >> .env
-fi
+sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$EMAIL_ADMIN|" .env
+sed -i "s|^INFINITEPAY_HANDLE=.*|INFINITEPAY_HANDLE=$HANDLE|" .env
+sed -i "s|^TRUST_PROXY=.*|TRUST_PROXY=1|" .env
 
 echo "==> [7/7] Subindo com PM2"
 pm2 delete postador-pro 2>/dev/null || true
@@ -78,12 +92,22 @@ pm2 start ecosystem.config.js
 pm2 save
 pm2 startup systemd -u "$(whoami)" --hp "$HOME" | sed 's/^sudo //' | bash || true
 
-echo ""
-echo "App instalado. Ainda precisa:"
-echo "  1) No painel Cloudflare: criar o Tunnel e rotear $DOMINIO -> http://localhost:3000"
-echo "  2) Na VPS: sudo cloudflared service install <TOKEN_DO_TUNNEL>"
-echo "  3) Editar o .env: nano .env -> preencher INFINITEPAY_HANDLE e conferir o resto"
-echo "  4) pm2 restart postador-pro"
-echo "  5) Testar: curl -I https://$DOMINIO"
-echo ""
-echo "Logs: pm2 logs postador-pro"
+cat <<EOF
+
+Instalado. Ainda falta, nesta ordem:
+
+  1) Preencher o SMTP no .env (sem isso o app nem sobe em produção):
+       nano $REPO_DIR/.env
+     -> SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM
+  2) Criar o Tunnel no painel da Cloudflare apontando $DOMINIO -> http://localhost:3000
+  3) Instalar o túnel na VPS:
+       sudo cloudflared service install <TOKEN_DO_TUNNEL>
+  4) Reiniciar para pegar o SMTP:
+       pm2 restart postador-pro
+  5) Conferir:
+       pm2 logs postador-pro --lines 50
+       curl -I https://$DOMINIO
+
+Na primeira execução, confira no log a linha "agendamentos": é ela que diz
+quando o backup vai rodar. Backup só acontece com NODE_ENV=production.
+EOF

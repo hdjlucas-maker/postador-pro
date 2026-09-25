@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Postador Pro — Central de campanhas para Facebook</title>
+<meta name="description" content="Agende publicações em grupos do Facebook por conta, com histórico, relatório e assinatura mensal ou anual.">
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+
+<div id="authShell" class="loginShell hidden">
+  <div class="auth">
+    <div class="authBox">
+      <div class="brand">POSTADOR <span>PRO</span></div>
+
+      <div class="authTabs" role="tablist">
+        <button id="tabLogin" class="active" type="button" data-modo="login">Entrar</button>
+        <button id="tabRegister" type="button" data-modo="register">Criar conta</button>
+      </div>
+
+      <form id="loginForm" class="form">
+        <div class="field"><label for="loginEmail">E-mail</label><input id="loginEmail" type="email" required autocomplete="email"></div>
+        <div class="field"><label for="loginPassword">Senha</label><input id="loginPassword" type="password" required autocomplete="current-password"></div>
+        <button class="btn primary block" type="submit">Entrar no Postador</button>
+        <div class="small right"><button type="button" class="btn ghost small" data-acao="esqueci">Esqueci minha senha</button></div>
+      </form>
+
+      <form id="registerForm" class="form hidden">
+        <div class="field"><label for="regName">Nome</label><input id="regName" required maxlength="80" autocomplete="name"></div>
+        <div class="field"><label for="regEmail">E-mail</label><input id="regEmail" type="email" required autocomplete="email"></div>
+        <div class="field"><label for="regPassword">Senha</label><input id="regPassword" type="password" minlength="8" required autocomplete="new-password"><div class="help">Mínimo de 8 caracteres.</div></div>
+        <div class="small" id="trialInfo">Comece com 7 dias de avaliação. Não pedimos documento.</div>
+        <button class="btn primary block" type="submit">Criar conta e começar</button>
+      </form>
+
+      <form id="forgotForm" class="form hidden">
+        <div class="field"><label for="forgotEmail">E-mail da conta</label><input id="forgotEmail" type="email" required autocomplete="email"></div>
+        <button class="btn primary block" type="submit">Enviar link de recuperação</button>
+        <div class="small right"><button type="button" class="btn ghost small" data-acao="voltarLogin">Voltar para o login</button></div>
+      </form>
+
+      <form id="resetForm" class="form hidden">
+        <div class="field"><label for="resetPassword">Nova senha</label><input id="resetPassword" type="password" minlength="8" required autocomplete="new-password"></div>
+        <button class="btn primary block" type="submit">Salvar nova senha</button>
+      </form>
+
+      <div class="sell">
+        <strong>O que você recebe</strong>
+        <div class="sellGrid">
+          <div class="sellItem"><span>1</span><div><b>Agendamento em massa.</b> Uma campanha publica em vários grupos do Facebook na hora que você escolher.</div></div>
+          <div class="sellItem"><span>2</span><div><b>Variações de texto e imagens.</b> Cada destino recebe um texto sorteado, com foto opcional.</div></div>
+          <div class="sellItem"><span>3</span><div><b>Sem senha do Facebook.</b> Você loga direto na janela do navegador, num perfil isolado.</div></div>
+          <div class="sellItem"><span>4</span><div><b>Histórico e CSV.</b> Resultado por destino, com o motivo de cada falha.</div></div>
+        </div>
+      </div>
+
+      <div class="legalLinks">
+        Ao criar a conta você concorda com os <a href="/termos">Termos de Uso</a> e a <a href="/privacidade">Política de Privacidade</a>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand">POSTADOR <span>PRO</span></div>
+    <nav class="nav" id="nav">
+      <button class="active" type="button" data-page="dashboard">Dashboard</button>
+      <button type="button" data-page="campaigns">Campanhas</button>
+      <button type="button" data-page="accounts">Contas Facebook</button>
+      <button type="button" data-page="history">Histórico</button>
+      <button type="button" data-page="subscription">Assinatura</button>
+      <button type="button" data-page="settings">Minha conta</button>
+      <button type="button" data-page="admin" id="navAdmin" hidden>Administração</button>
+    </nav>
+    <div class="sideBottom">
+      <div class="sideUser" id="sideUser"></div>
+      <button class="btn ghost" type="button" data-acao="logout">Sair</button>
+    </div>
+  </aside>
+
+  <section class="main">
+    <header class="top">
+      <div id="pageHint" class="muted">Central de campanhas e publicações</div>
+      <div class="userMini">
+        <div id="avatar" class="avatar">P</div>
+        <div>
+          <div id="userName" style="font-size:13px;font-weight:700">Usuário</div>
+          <div id="planLabel" class="small">Avaliação</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <div id="trialBar" class="trialBar hidden">
+        <div>
+          <strong id="trialText">Avaliação gratuita</strong>
+          <div class="small" id="trialSub"></div>
+        </div>
+        <button class="btn primary" type="button" data-page="subscription">Ver planos</button>
+      </div>
+
+      <section id="page-dashboard" class="page active">
+        <div class="titleRow">
+          <div class="title"><h1>Dashboard</h1><p>O resumo da sua operação.</p></div>
+          <button class="btn primary" type="button" data-acao="novaCampanha">+ Nova campanha</button>
+        </div>
+
+        <div class="grid stats">
+          <div class="card"><div class="statLabel">Campanhas</div><div class="statValue" id="sCampaigns">0</div></div>
+          <div class="card"><div class="statLabel">Agendadas</div><div class="statValue" id="sScheduled">0</div></div>
+          <div class="card"><div class="statLabel">Publicadas</div><div class="statValue" id="sDone">0</div></div>
+          <div class="card"><div class="statLabel">Falhas</div><div class="statValue" id="sFailed">0</div></div>
+        </div>
+
+        <div class="grid two section">
+          <div class="card">
+            <h3 style="margin-top:0">Próximas publicações</h3>
+            <div id="upcoming"></div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top:0">Contas Facebook</h3>
+            <div id="fbSummary"></div>
+            <div class="actions section">
+              <button class="btn ghost" type="button" data-page="accounts">Gerenciar contas</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-campaigns" class="page">
+        <div class="titleRow">
+          <div class="title"><h1>Campanhas</h1><p>Cada campanha publica em vários destinos e acompanha o resultado de todos.</p></div>
+          <button class="btn primary" type="button" data-acao="novaCampanha">+ Nova campanha</button>
+        </div>
+        <div class="card">
+          <div class="tableWrap">
+            <table class="table">
+              <thead><tr><th>Campanha</th><th>Conta</th><th>Destinos</th><th>Horário</th><th>Status</th><th></th></tr></thead>
+              <tbody id="campaignTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-accounts" class="page">
+        <div class="titleRow">
+          <div class="title"><h1>Contas Facebook</h1><p>O login acontece na janela do navegador, num perfil isolado.</p></div>
+          <button class="btn primary" type="button" data-acao="conectar">+ Conectar Facebook</button>
+        </div>
+        <div id="accountsList" class="grid"></div>
+        <div class="footerNote">
+          O Postador nunca pede a senha do Facebook no formulário. Cada conta é salva em um perfil de navegador isolado no servidor.
+          <span id="planLimitsNote"></span>
+        </div>
+      </section>
+
+      <section id="page-history" class="page">
+        <div class="titleRow">
+          <div class="title"><h1>Histórico</h1><p>Resultado por destino, com paginação e filtro por conta.</p></div>
+        </div>
+        <div class="actions" style="margin-bottom:14px">
+          <select id="historyAccount" class="filterSelect"></select>
+          <select id="historyStatus" class="filterSelect">
+            <option value="">Todos os status</option>
+            <option value="concluido">Publicados</option>
+            <option value="falhou">Com falha</option>
+            <option value="interrompido">Interrompidos</option>
+            <option value="pendente">Pendentes</option>
+            <option value="processando">Processando</option>
+            <option value="cancelado">Cancelados</option>
+          </select>
+          <button class="btn ghost" type="button" data-acao="exportar">Exportar CSV</button>
+        </div>
+        <div class="card">
+          <div class="tableWrap">
+            <table class="table">
+              <thead><tr><th>Agendado</th><th>Campanha</th><th>Conta</th><th>Destino</th><th>Status</th><th>Observação</th></tr></thead>
+              <tbody id="historyTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="historyPagination" class="pager"></div>
+      </section>
+
+      <section id="page-subscription" class="page">
+        <div class="titleRow">
+          <div class="title"><h1>Assinatura</h1><p>Pagamento no checkout da InfinitePay. O acesso é liberado após a confirmação.</p></div>
+        </div>
+        <div id="currentPlan" class="card"></div>
+        <div class="grid planGrid section" id="planGrid"></div>
+        <div class="card section" id="limitsCard"></div>
+        <div class="card section">
+          <strong>Pagamento com segurança</strong>
+          <p class="small">O pedido é criado no checkout integrado da InfinitePay. O Postador confirma o pagamento no servidor antes de liberar o acesso.</p>
+        </div>
+      </section>
+
+      <section id="page-settings" class="page">
+        <div class="titleRow">
+          <div class="title"><h1>Minha conta</h1><p>Dados, senha e privacidade.</p></div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0">Dados de acesso</h3>
+          <form class="form" id="formPerfil">
+            <div class="field"><label for="perfilNome">Nome</label><input id="perfilNome" required maxlength="80"></div>
+            <div class="field"><label for="perfilEmail">E-mail</label><input id="perfilEmail" type="email" disabled><div class="help">O e-mail da conta não pode ser alterado.</div></div>
+            <div><button class="btn primary" type="submit">Salvar nome</button></div>
+          </form>
+        </div>
+
+        <div class="card section">
+          <h3 style="margin-top:0">Alterar senha</h3>
+          <form class="form" id="formSenha">
+            <div class="field"><label for="senhaAtual">Senha atual</label><input id="senhaAtual" type="password" required autocomplete="current-password"></div>
+            <div class="field"><label for="senhaNova">Nova senha</label><input id="senhaNova" type="password" minlength="8" required autocomplete="new-password"></div>
+            <div><button class="btn primary" type="submit">Alterar senha</button></div>
+          </form>
+        </div>
+
+        <div class="card section">
+          <h3 style="margin-top:0">Privacidade (LGPD)</h3>
+          <div class="list">
+            <div class="listItem">
+              <div><strong>Baixar meus dados</strong><div class="small">Conta, campanhas, histórico e pagamentos em JSON.</div></div>
+              <button class="btn ghost" type="button" data-acao="exportarDados">Exportar</button>
+            </div>
+            <div class="listItem">
+              <div><strong>Excluir minha conta</strong><div class="small">Remove dados, campanhas e perfis de navegador. Não pode ser desfeito.</div></div>
+              <button class="btn danger" type="button" data-acao="excluirConta">Excluir conta</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-admin" class="page">
+        <div class="titleRow">
+          <div class="title"><h1>Administração</h1><p>Operação do sistema e gestão de assinaturas.</p></div>
+        </div>
+        <div id="adminOverview" class="grid stats"></div>
+        <div class="card section">
+          <div class="actions" style="margin-bottom:14px">
+            <input id="adminBusca" placeholder="Buscar por nome ou e-mail" class="filterSelect" style="min-width:240px">
+            <button class="btn ghost" type="button" data-acao="adminBuscar">Buscar</button>
+            <button class="btn ghost" type="button" data-acao="adminPagamentos">Pagamentos</button>
+            <button class="btn ghost" type="button" data-acao="adminBackup">Gerar backup</button>
+          </div>
+          <div class="tableWrap">
+            <table class="table">
+              <thead><tr><th>Cliente</th><th>Plano</th><th>Status</th><th>Campanhas</th><th></th></tr></thead>
+              <tbody id="adminTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card section hidden" id="adminPaymentsCard">
+          <h3 style="margin-top:0">Pagamentos recentes</h3>
+          <div class="tableWrap">
+            <table class="table">
+              <thead><tr><th>Data</th><th>Pedido</th><th>Plano</th><th>Valor</th><th>Status</th><th>Origem</th></tr></thead>
+              <tbody id="adminPaymentsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</div>
+
+<div id="campaignModal" class="modalBack">
+  <div class="modal">
+    <div class="modalHead">
+      <h3 id="campaignModalTitle">Nova campanha</h3>
+      <button class="btn ghost" type="button" data-acao="fecharCampanha">Fechar</button>
+    </div>
+    <form class="form" id="formCampanha" style="margin-top:16px">
+      <div class="field">
+        <label for="cNome">Nome da campanha</label>
+        <input id="cNome" required maxlength="100" placeholder="Ex.: Promoção de setembro">
+      </div>
+      <div class="field">
+        <label for="cAccount">Conta Facebook</label>
+        <select id="cAccount" required></select>
+      </div>
+      <div class="field">
+        <label for="cDestinos">Grupos de destino — uma URL por linha</label>
+        <textarea id="cDestinos" required placeholder="https://facebook.com/groups/grupo1&#10;https://facebook.com/groups/grupo2"></textarea>
+        <div class="help">O sistema acompanha cada destino separadamente e ignora URLs repetidas.</div>
+      </div>
+      <div class="field">
+        <label for="cTexto">Texto da publicação</label>
+        <textarea id="cTexto" required placeholder="Digite o conteúdo da publicação"></textarea>
+      </div>
+      <div id="cTextosExtras"></div>
+      <div><button type="button" class="btn ghost" data-acao="addTexto">+ Adicionar variação de texto</button></div>
+      <div class="field">
+        <label for="cImagensInput">Imagens (opcional)</label>
+        <input id="cImagensInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
+        <div class="help">Até 20 imagens. Cada postagem sorteia uma da lista.</div>
+        <div class="imgPreview" id="cImagensList"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="cData">Data e hora</label><input id="cData" type="datetime-local" required></div>
+        <div class="field">
+          <label>Conta</label>
+          <div class="small" id="cLimiteInfo"></div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit" id="cSubmitBtn">Criar campanha</button>
+        <button class="btn ghost" type="button" data-acao="fecharCampanha">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="accountModal" class="modalBack">
+  <div class="modal" style="max-width:420px">
+    <div class="modalHead">
+      <h3>Nome da conta Facebook</h3>
+      <button class="btn ghost" type="button" data-acao="fecharContaModal">Fechar</button>
+    </div>
+    <form class="form" id="formContaNome" style="margin-top:16px">
+      <div class="field">
+        <label for="contaNome">Nome de identificação</label>
+        <input id="contaNome" required maxlength="40" placeholder="Ex.:minha loja">
+        <div class="help">Só aparece dentro do Postador, para você diferenciar as contas.</div>
+      </div>
+      <div><button class="btn primary" type="submit">Conectar e abrir janela</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="grantModal" class="modalBack">
+  <div class="modal" style="max-width:460px">
+    <div class="modalHead">
+      <h3 id="grantTitle">Conceder acesso</h3>
+      <button class="btn ghost" type="button" data-acao="fecharGrant">Fechar</button>
+    </div>
+    <form class="form" id="formGrant" style="margin-top:16px">
+      <div class="row">
+        <div class="field"><label for="grantDias">Dias</label><input id="grantDias" type="number" min="1" max="3650" value="30" required></div>
+        <div class="field">
+          <label for="grantPlano">Plano</label>
+          <select id="grantPlano"><option value="monthly">Mensal</option><option value="annual">Anual</option></select>
+        </div>
+      </div>
+      <div class="field"><label for="grantMotivo">Motivo</label><input id="grantMotivo" maxlength="120" placeholder="Pagamento recebido por fora"></div>
+      <div><button class="btn primary" type="submit">Conceder acesso</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="/assets/app.js" defer></script>
+</body>
+</html>

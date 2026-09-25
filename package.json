@@ -6,7 +6,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node tests/smoke.test.js",
+    "lint": "node scripts/check-syntax.js && node scripts/check-modulos.js"
   },
   "engines": {
     "node": ">=18.17.0"
