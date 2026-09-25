@@ -58,15 +58,34 @@ npx puppeteer browsers install chrome
 ```bash
 npm run lint   # sintaxe de todos os arquivos + chamadas entre módulos
 npm test       # suíte de fumaça
+npm run preflight  # o que impede a subida em produção
 ```
 
 A suíte sobe o app no próprio processo, com diretório de dados temporário, e
 cobre autenticação, isolamento entre usuários, limites de plano, CSRF, origem,
 exposição de arquivos, upload, fila, cobrança e admin.
 
-> **Antes de alterar o projeto, leia [`DIRETRIZES.md`](DIRETRIZES.md).**
+`npm run preflight` confere o que só quebra em produção: navegador presente,
+espaço em disco, permissão de escrita, display virtual (Xvfb) e a configuração
+do `.env`. Ele sai com código 1 se algo impedir a publicação. Use antes de
+`deploy-vps.sh` e de `update.sh` — os dois já chamam o preflight.
+
+## Backup
+
+```bash
+npm run backup -- listar                    # backups disponíveis
+npm run backup -- criar                     # gera um agora
+npm run backup -- restaurar backup-2026-... # restaura (pare o app antes)
+```
+
+O backup automático roda a cada `BACKUP_MINUTOS` (padrão: 6 horas), apenas com
+`NODE_ENV=production`, e mantém as `BACKUPS_MAXIMOS` cópias mais recentes (30).
+Os backups ficam em `data/backups`, **na mesma máquina**: copie para fora, senão
+perder o disco é perder tudo.
+
+> **Antes de publicar o produto, leia [`DIRETRIZES.md`](DIRETRIZES.md).**
 > Ele registra as regras inegociáveis, a arquitetura atual, as correções já
-> feitas e as pendências que faltam para a venda.
+> feitas e o plano por etapas para ir ao ar.
 
 ## Configuração
 

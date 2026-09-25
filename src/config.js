@@ -110,6 +110,8 @@ const EXPOSIR_LINK_REDEFINICAO =
 
 const COMPACTACAO_MINUTOS = num(process.env.COMPACTACAO_MINUTOS, 30);
 const BACKUP_MINUTOS = num(process.env.BACKUP_MINUTOS, 360);
+// Com backup a cada 6 horas, 30 cópias dão pouco mais de 7 dias de histórico.
+const BACKUPS_MAXIMOS = Math.max(1, num(process.env.BACKUPS_MAXIMOS, 30));
 
 // Limites por IP das rotas sensíveis. Ajustáveis para instalações com proxy
 // compartilhado ou para a suíte de testes.
@@ -174,7 +176,8 @@ const config = {
   RESET_TOKEN_MINUTES,
   LOGIN_MINUTOS,
   COMPACTACAO_MINUTOS,
-  BACKUP_MINUTOS
+  BACKUP_MINUTOS,
+  BACKUPS_MAXIMOS
 };
 
 function validarConfig() {

@@ -8,7 +8,11 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node tests/smoke.test.js",
-    "lint": "node scripts/check-syntax.js && node scripts/check-modulos.js"
+    "lint": "node scripts/check-syntax.js && node scripts/check-modulos.js",
+    "preflight": "node scripts/preflight.js",
+    "backup": "node scripts/backup.js",
+    "verificar:navegador": "node scripts/testar-navegador.js",
+    "verificar:backup": "node scripts/testar-backup.js"
   },
   "engines": {
     "node": ">=18.17.0"

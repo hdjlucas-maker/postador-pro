@@ -83,17 +83,13 @@ async function backup() {
     }
   }
 
-  manterBackups(10);
-  log.info('backup_concluido', { destino, arquivos: arquivos.length });
+  manterBackups(config.BACKUPS_MAXIMOS);
+  log.info('backup_concluido', { destino, arquivos: arquivos.length, mantidos: config.BACKUPS_MAXIMOS });
   return destino;
 }
 
 function manterBackups(quantidade) {
-  const entradas = fs
-    .readdirSync(config.BACKUP_DIR, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && entry.name.startsWith('backup-'))
-    .map(entry => entry.name)
-    .sort();
+  const entradas = listarBackups();
 
   while (entradas.length > quantidade) {
     const antigo = entradas.shift();
@@ -101,4 +97,50 @@ function manterBackups(quantidade) {
   }
 }
 
-module.exports = { db, iniciar, compactarTodas, backup, COLECOES, listarArquivos };
+// Os nomes seguem o formato ISO, então ordenar por nome equivale a ordenar por
+// tempo. Mais antigo primeiro.
+function listarBackups() {
+  return fs
+    .readdirSync(config.BACKUP_DIR, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name.startsWith('backup-'))
+    .map(entry => entry.name)
+    .sort();
+}
+
+// Um backup que não pode ser restaurado não é backup. Copia os arquivos de uma
+// cópia de volta para o diretório de dados, preservando o que não existir
+// naquele backup.
+function restaurar(nomeBackup) {
+  const origem = path.join(config.BACKUP_DIR, path.basename(String(nomeBackup || '')));
+
+  if (!listarBackups().includes(path.basename(origem))) {
+    throw new Error(`Backup não encontrado: ${origem}`);
+  }
+
+  const arquivos = fs.readdirSync(origem).filter(nome => nome.endsWith('.db'));
+  if (!arquivos.length) {
+    throw new Error(`Backup sem arquivos de banco: ${origem}`);
+  }
+
+  const restaurados = [];
+  for (const nome of arquivos) {
+    const de = path.join(origem, nome);
+    const para = path.join(config.DATA_DIR, nome);
+    fs.copyFileSync(de, para);
+    restaurados.push(nome);
+  }
+
+  log.warn('backup_restaurado', { origem, arquivos: restaurados.length, colecoes: restaurados });
+  return { origem, arquivos: restaurados };
+}
+
+module.exports = {
+  db,
+  iniciar,
+  compactarTodas,
+  backup,
+  restaurar,
+  listarBackups,
+  COLECOES,
+  listarArquivos
+};

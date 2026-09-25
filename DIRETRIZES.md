@@ -80,7 +80,8 @@ src/
 public/                index.html, termos.html, privacidade.html, assets/
 data/                  bancos, perfis, uploads, backups (NÃO versionar)
 tests/smoke.test.js    69 verificações
-scripts/               check-syntax.js, check-modulos.js, testar-navegador.js
+scripts/               check-syntax.js, check-modulos.js, preflight.js,
+                       backup.js, testar-navegador.js, testar-backup.js
 ```
 
 ### Fluxo de uma publicação (não quebrar)
@@ -138,7 +139,21 @@ O estado atual é **69/69 passando** e lint limpo. Não aceito regressão.
 
 A suíte sobe o app no próprio processo, com `DATA_DIR` temporário, e **não
 publica de verdade** (não há Chrome no ambiente de teste). A publicação real
-ainda não foi validada contra o Facebook — é a pendência nº 1 da seção 8.
+é a Etapa 5, com o produto no ar.
+
+Verificações além da suíte:
+
+```bash
+npm run preflight           # o que impede a subida em produção
+npm run verificar:navegador # Chrome sobe, navega e digita
+npm run verificar:backup    # cria backup, apaga o banco, restaura e confere
+npm run backup -- listar    # backups disponíveis na VPS
+```
+
+`preflight` sai com código 1 se algo impedir a publicação (navegador
+ausente, disco cheio, pasta sem escrita, display virtual parado, SMTP
+faltando em produção). Ele é exatamente o filtro que faltava entre "rodei o
+deploy" e "descobri no meio da campanha que nada funciona".
 
 ---
 
@@ -207,36 +222,65 @@ ainda não foi validada contra o Facebook — é a pendência nº 1 da seção 8
 
 ---
 
-## 8. Pendências reais para vender
+## 8. Plano por etapas
 
-Ordenadas por impacto. Nada aqui é "refatoração" — é o que falta para o
-produto funcionar com cliente de verdade.
+O objetivo é **publicar o produto online** e vendê-lo. O teste de publicação
+real no Facebook é o **último** passo, com o produto no ar e usuário de
+verdade — não é tarefa de agora. Não travou a etapa atual.
 
-1. **Publicação real ainda não confirmada.** O navegador sobe, navega e digita
-   de verdade (validado com `node scripts/testar-navegador.js`: Chrome 153,
-   navegação e digitação conferidas). O executor também foi exercitado contra
-   uma cópia local do compositor: chegou a abrir o editor, clicar em
-   "Escreva algo..." e digitar o texto, mas o teste parou na etapa de anexo de
-   imagem. O que falta é confirmar com uma conta e um grupo de teste reais que
-   o DOM do Facebook bate com os seletores:
-   - `div[role="button"]::-p-text(Escreva algo...)`
-   - `div[role="textbox"]`
-   - `div[aria-label="Foto/vídeo"]` (com acento)
-   - `div[aria-label="Publicar"]`
-   **Atenção:** se o seletor divergir, a falha aparece como "O editor de
-   publicação não apareceu neste destino", que é genérica demais. Ao testar com
-   conta real, guarde o print da tela.
-2. **Revisão jurídica** de `public/termos.html` e `public/privacidade.html`.
-   São rascunhos. Automação de Facebook e publicação em grupos têm
-   implicações de responsabilidade que um advogado precisa avaliar.
-3. **InfinitePay não testada de ponta a ponta** com confirmação real de
-   pagamento. O código está coberto por teste, mas não por um pagamento real.
-4. **Confirmar a conta de teste do Facebook** e os direitos de uso dos
-   destinos. Publicação em massa pode violar os termos da Meta.
-5. **Backup externo.** O backup automático grava em `data/backups`, na mesma
-   máquina. Um provedor ou RAID ou nada. Sem isso, a recuperação não existe.
-6. **Decidir o destino dos dados antigos** que estavam na raiz (não há mais
-   lá, mas se existirem em algum backup, precisam de migração).
+### Etapa 1 — Publicação online (atual)
+- [x] Código modular, segurança fechada, 69/69 testes
+- [x] `deploy-vps.sh` e `update.sh` prontos
+- [x] `ecosystem.config.js` com `instances: 1` e `kill_timeout`
+- [x] Navegador com `CHROME_PATH` configurável
+- [x] `scripts/preflight.js`: confere navegador, disco, permissões, display
+      virtual e configuração antes de subir
+- [x] `scripts/backup.js`: criar, listar e **restaurar** backup pela linha de
+      comando (antes não havia como restaurar)
+- [x] Retenção de backup configurável (`BACKUPS_MAXIMOS`, padrão 30)
+- [x] `preflight` ligado ao `deploy-vps.sh` e ao `update.sh`
+- [ ] Subir na VPS, domínio, HTTPS e túnel
+- [ ] Smoke test da instância no ar
+
+### Etapa 2 — Pagamento real
+- [ ] InfinitePay: conta ationada e `INFINITEPAY_HANDLE` preenchido
+- [ ] Compra de teste real de ponta a ponta (checkout → webhook → acesso)
+- [ ] Conferir que o acesso libera no prazo esperado
+- [ ] Conferir estorno/cancelamento (o que acontece com quem cancela)
+
+### Etapa 3 — Jurídico
+- [ ] `public/termos.html` e `public/privacidade.html` revisados por advogado
+- [ ] Declarar no texto: quais dados são guardados, por quanto tempo e por quê
+- [ ] Informar os terceiros: Meta (Facebook), InfinitePay, servidor de e-mail
+- [ ] Base legal para o tratamento de dados e canal do titular
+- [ ] Conferir as regras da Meta para publicação em grupos
+
+### Etapa 4 — Operação
+- [ ] Backup fora da máquina (o atual grava em `data/backups`, no mesmo disco)
+- [ ] Alerta se o serviço cair
+- [ ] Conferir uso de RAM: cada navegador é um Chromium headful
+
+### Etapa 5 — Teste final de aceitação (com produto no ar)
+Rodar **depois** das etapas acima, com o produto publicado e um usuário real.
+Este é o teste que vale a venda.
+
+- [ ] Conta de teste do Facebook em grupo de teste real
+- [ ] Conectar conta → criar campanha → publicar em 1 grupo de verdade
+- [ ] Conferir se o post apareceu, com texto e imagem corretos
+- [ ] Conferir se os 4 seletores batem com o DOM real do Facebook:
+  - `div[role="button"]::-p-text(Escreva algo...)`
+  - `div[role="textbox"]`
+  - `div[aria-label="Foto/vídeo"]` (com acento)
+  - `div[aria-label="Publicar"]`
+- [ ] Agendamento: deixar uma campanha para daqui a 10 minutos e confirmar
+- [ ] Compra real e confirmação de que o acesso foi liberado
+- [ ] Erro de seletores aparece como "O editor de publicação não apareceu neste
+      destino", que é genérico demais: guardar print da tela
+
+> Já validado: o navegador sobe, navega e digita
+> (`node scripts/testar-navegador.js` — Chrome 153). O executor chegou a abrir
+> o editor e digitar o texto numa cópia local do compositor. Falta só o DOM
+> real do Facebook.
 
 ### Sobre o navegador
 

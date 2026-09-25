@@ -15,18 +15,18 @@ HANDLE="${3:?Informe sua InfiniteTag (sem o \$)}"
 
 REPO_DIR="$HOME/postador-pro"
 
-echo "==> [1/7] Atualizando o sistema"
+echo "==> [1/8] Atualizando o sistema"
 sudo apt-get update -y
 sudo apt-get install -y curl git build-essential ca-certificates gnupg lsb-release
 
-echo "==> [2/7] Node.js 20 + npm"
+echo "==> [2/8] Node.js 20 + npm"
 if ! command -v node >/dev/null 2>&1; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
   sudo apt-get install -y nodejs
 fi
 echo "node: $(node -v) | npm: $(npm -v)"
 
-echo "==> [3/7] Dependências do Chromium (puppeteer) + Xvfb (display virtual)"
+echo "==> [3/8] Dependências do Chromium (puppeteer) + Xvfb (display virtual)"
 # Sem estas bibliotecas o Chromium abre e morre na hora, e a fila de publicação
 # fica repetindo a mesma falha indefinidamente.
 sudo apt-get install -y \
@@ -36,7 +36,7 @@ sudo apt-get install -y \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 fonts-liberation \
   libu2f-udev xdg-utils
 
-echo "==> [4/7] PM2 + cloudflared"
+echo "==> [4/8] PM2 + cloudflared"
 sudo npm install -g pm2
 if ! command -v cloudflared >/dev/null 2>&1; then
   curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
@@ -45,7 +45,7 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   sudo apt-get install -y cloudflared
 fi
 
-echo "==> [5/7] Xvfb como serviço (display :99)"
+echo "==> [5/8] Xvfb como serviço (display :99)"
 sudo tee /etc/systemd/system/xvfb.service >/dev/null <<'EOF'
 [Unit]
 Description=Xvfb Virtual Display :99
@@ -62,7 +62,7 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now xvfb
 
-echo "==> [6/7] Instalando o app"
+echo "==> [6/8] Instalando o app"
 cd "$REPO_DIR"
 if [ -f package-lock.json ]; then
   npm ci --omit=dev
@@ -86,7 +86,15 @@ sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$EMAIL_ADMIN|" .env
 sed -i "s|^INFINITEPAY_HANDLE=.*|INFINITEPAY_HANDLE=$HANDLE|" .env
 sed -i "s|^TRUST_PROXY=.*|TRUST_PROXY=1|" .env
 
-echo "==> [7/7] Subindo com PM2"
+# O app não sobe sem SMTP, e o navegador é o que faz a fila publicar. Falhar
+# aqui é muito melhor do que descobrir isso com cliente esperando.
+echo "==> [7/8] Conferindo antes de subir"
+# O SMTP ainda não foi preenchido nesta instalação nova, então a checagem
+# apontará o que falta. Ela não aborta por SMTP ausente neste ponto: quem
+# preencheu o passo anterior recebe a lista do que falta.
+node scripts/preflight.js || true
+
+echo "==> [8/8] Subindo com PM2"
 pm2 delete postador-pro 2>/dev/null || true
 pm2 start ecosystem.config.js
 pm2 save
