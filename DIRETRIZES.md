@@ -247,6 +247,22 @@ verdade — não é tarefa de agora. Não travou a etapa atual.
 - [ ] Subir na VPS, domínio, HTTPS e túnel
 - [ ] Rodar `node scripts/smoke-online.js https://seu-dominio` no ar
 
+> **O passo a passo está em [`GUIA-PUBLICACAO.md`](GUIA-PUBLICACAO.md)**:
+> como comprar o domínio, qual VPS escolher, configurar o túnel na Cloudflare,
+> SMTP e InfinitePay.
+
+### Sobre a URL do Cloudflare
+
+A URL `trycloudflare.com` (Quick Tunnel) **não serve para vender**: ela muda
+toda vez que o túnel reinicia. Cliente receberia link morto. Para produto pago
+é obrigatório um domínio próprio com URL fixa.
+
+A Cloudflare **não aluga VPS**. Ela faz DNS, HTTPS e o túnel. A VPS é
+contratada em outro provedor (Hetzner, Contabo, Vultr, Locaweb, Hostinger).
+
+Mínimo da VPS: **Ubuntu 24.04, 4 GB RAM, 2 vCPU, 40 GB disco**. Cada
+navegador do Facebook aberto consome 1 a 1,5 GB.
+
 **Depois de subir, nesta ordem:**
 1. Preencher SMTP no `.env` — sem isso o app nem sobe
 2. `node scripts/preflight.js` — precisa responder "Pode subir"
@@ -254,10 +270,16 @@ verdade — não é tarefa de agora. Não travou a etapa atual.
 4. Só então repassar o link para o primeiro cliente
 
 ### Etapa 2 — Pagamento real
-- [ ] InfinitePay: conta ationada e `INFINITEPAY_HANDLE` preenchido
+- [x] InfinitePay: conta válida, InfiniteTag `$servicoslucas`
+- [ ] `INFINITEPAY_HANDLE=servicoslucas` no `.env` da VPS (sem o `$`)
+- [ ] Conferir recebimento habilitado e chave de API no painel InfinitePay
 - [ ] Compra de teste real de ponta a ponta (checkout → webhook → acesso)
 - [ ] Conferir que o acesso libera no prazo esperado
 - [ ] Conferir estorno/cancelamento (o que acontece com quem cancela)
+
+> O `webhook_url` é `https://seudominio.com/api/webhooks/infinitepay` e precisa
+> ser público e HTTPS. Por isso o domínio tem que estar no ar antes de testar
+> cobrança.
 
 ### Etapa 3 — Jurídico
 - [ ] `public/termos.html` e `public/privacidade.html` revisados por advogado

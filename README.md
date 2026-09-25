@@ -96,6 +96,9 @@ perder o disco é perder tudo.
 > **Antes de publicar o produto, leia [`DIRETRIZES.md`](DIRETRIZES.md).**
 > Ele registra as regras inegociáveis, a arquitetura atual, as correções já
 > feitas e o plano por etapas para ir ao ar.
+>
+> Para colocar no ar: [`GUIA-PUBLICACAO.md`](GUIA-PUBLICACAO.md) tem o passo a
+> passo de domínio, VPS, túnel, SMTP e InfinitePay.
 
 ## Configuração
 
