@@ -41,6 +41,9 @@ function registrar(router) {
         })),
         trialDias: config.TRIAL_DAYS,
         limites: config.PLAN_LIMITS,
+        // Indica que o checkout está disponível, ou seja, que a InfinitePay
+        // está configurada. NÃO é o status de pagamento deste usuário: o
+        // acesso de cada um vem da sessão.
         pago: Boolean(config.INFINITEPAY_HANDLE)
       });
     })

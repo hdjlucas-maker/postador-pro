@@ -148,6 +148,8 @@ npm run preflight           # o que impede a subida em produção
 npm run verificar:navegador # Chrome sobe, navega e digita
 npm run verificar:backup    # cria backup, apaga o banco, restaura e confere
 npm run backup -- listar    # backups disponíveis na VPS
+
+node scripts/smoke-online.js https://seu-dominio   # a instância no ar
 ```
 
 `preflight` sai com código 1 se algo impedir a publicação (navegador
@@ -239,8 +241,17 @@ verdade — não é tarefa de agora. Não travou a etapa atual.
       comando (antes não havia como restaurar)
 - [x] Retenção de backup configurável (`BACKUPS_MAXIMOS`, padrão 30)
 - [x] `preflight` ligado ao `deploy-vps.sh` e ao `update.sh`
+- [x] `scripts/smoke-online.js`: confere a instância publicada de fora
+      (28 verificações: HTTPS, cabeçalhos, arquivos privados, API, páginas).
+      Validado contra uma instância local: 28/28
 - [ ] Subir na VPS, domínio, HTTPS e túnel
-- [ ] Smoke test da instância no ar
+- [ ] Rodar `node scripts/smoke-online.js https://seu-dominio` no ar
+
+**Depois de subir, nesta ordem:**
+1. Preencher SMTP no `.env` — sem isso o app nem sobe
+2. `node scripts/preflight.js` — precisa responder "Pode subir"
+3. `node scripts/smoke-online.js https://seu-dominio` — precisa dar 28/28
+4. Só então repassar o link para o primeiro cliente
 
 ### Etapa 2 — Pagamento real
 - [ ] InfinitePay: conta ationada e `INFINITEPAY_HANDLE` preenchido

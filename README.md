@@ -70,6 +70,16 @@ espaço em disco, permissão de escrita, display virtual (Xvfb) e a configuraç�
 do `.env`. Ele sai com código 1 se algo impedir a publicação. Use antes de
 `deploy-vps.sh` e de `update.sh` — os dois já chamam o preflight.
 
+Depois de subir, confira a instância de fora:
+
+```bash
+node scripts/smoke-online.js https://seu-dominio
+```
+
+São 28 verificações: HTTPS, cabeçalhos de segurança, arquivos privados
+(`.env`, `data/`, `*.db`, código-fonte), API, bloqueio de CSRF e páginas
+públicas. Resposta `28/28` significa que dá para mostrar o link ao cliente.
+
 ## Backup
 
 ```bash
