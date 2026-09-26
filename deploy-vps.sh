@@ -15,28 +15,21 @@ HANDLE="${3:?Informe sua InfiniteTag (sem o \$)}"
 
 REPO_DIR="$HOME/postador-pro"
 
-echo "==> [1/8] Atualizando o sistema"
+echo "==> [1/5] Atualizando o sistema"
 sudo apt-get update -y
 sudo apt-get install -y curl git build-essential ca-certificates gnupg lsb-release
 
-echo "==> [2/8] Node.js 20 + npm"
+echo "==> [2/5] Node.js 20 + npm"
 if ! command -v node >/dev/null 2>&1; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
   sudo apt-get install -y nodejs
 fi
 echo "node: $(node -v) | npm: $(npm -v)"
 
-echo "==> [3/8] Dependências do Chromium (puppeteer) + Xvfb (display virtual)"
-# Sem estas bibliotecas o Chromium abre e morre na hora, e a fila de publicação
-# fica repetindo a mesma falha indefinidamente.
-sudo apt-get install -y \
-  xvfb \
-  libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-  libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 \
-  libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 fonts-liberation \
-  libu2f-udev xdg-utils
-
-echo "==> [4/8] PM2 + cloudflared"
+# A API de licença é um Express com NeDB. Ela não abre navegador e não precisa
+# de display virtual, de Chromium nem das bibliotecas gráficas do puppeteer.
+# Uma VPS de 1 GB de RAM com isso.
+echo "==> [3/5] PM2 + cloudflared"
 sudo npm install -g pm2
 if ! command -v cloudflared >/dev/null 2>&1; then
   curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
@@ -45,33 +38,13 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   sudo apt-get install -y cloudflared
 fi
 
-echo "==> [5/8] Xvfb como serviço (display :99)"
-sudo tee /etc/systemd/system/xvfb.service >/dev/null <<'EOF'
-[Unit]
-Description=Xvfb Virtual Display :99
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/Xvfb :99 -screen 0 1366x768x24 -ac
-Restart=always
-RestartSec=2
-
-[Install]
-WantedBy=multi-user.target
-EOF
-sudo systemctl daemon-reload
-sudo systemctl enable --now xvfb
-
-echo "==> [6/8] Instalando o app"
+echo "==> [4/5] Instalando o app"
 cd "$REPO_DIR"
 if [ -f package-lock.json ]; then
   npm ci --omit=dev
 else
   npm install --omit=dev
 fi
-
-# O Chromium do puppeteer fica fora do node_modules e precisa ser baixado.
-npx puppeteer browsers install chrome
 
 mkdir -p data/backups logs
 
@@ -86,15 +59,14 @@ sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=$EMAIL_ADMIN|" .env
 sed -i "s|^INFINITEPAY_HANDLE=.*|INFINITEPAY_HANDLE=$HANDLE|" .env
 sed -i "s|^TRUST_PROXY=.*|TRUST_PROXY=1|" .env
 
-# O app não sobe sem SMTP, e o navegador é o que faz a fila publicar. Falhar
-# aqui é muito melhor do que descobrir isso com cliente esperando.
-echo "==> [7/8] Conferindo antes de subir"
+# O app não sobe sem SMTP. Falhar aqui é muito melhor do que descobrir isso com
+# cliente esperando.
+echo "==> [5/5] Conferindo antes de subir"
 # O SMTP ainda não foi preenchido nesta instalação nova, então a checagem
 # apontará o que falta. Ela não aborta por SMTP ausente neste ponto: quem
 # preencheu o passo anterior recebe a lista do que falta.
 node scripts/preflight.js || true
 
-echo "==> [8/8] Subindo com PM2"
 pm2 delete postador-pro 2>/dev/null || true
 pm2 start ecosystem.config.js
 pm2 save

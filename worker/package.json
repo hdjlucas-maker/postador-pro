@@ -1,0 +1,32 @@
+{
+  "name": "postador-pro-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API de licença e webhook InfinitePay do Postador Pro, sobre Cloudflare Workers + D1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.0",
+    "@cloudflare/workers-types": "^5.20260906.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.4": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.28.1": true,
+    "workerd@1.20250906.0": true,
+    "workerd@1.20260925.1": true,
+    "sharp@0.33.5": true,
+    "sharp@0.35.4": true
+  }
+}

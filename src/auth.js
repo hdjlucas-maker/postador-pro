@@ -18,6 +18,10 @@ function addDays(date, days) {
   return new Date(new Date(date).getTime() + days * 86400000);
 }
 
+function addMinutos(date, minutos) {
+  return new Date(new Date(date).getTime() + minutos * 60000);
+}
+
 function normalizarEmail(valor) {
   return String(valor || '').trim().toLowerCase();
 }
@@ -58,6 +62,101 @@ async function criarSessao(userId) {
   }
 
   return token;
+}
+
+function extrairBearer(req) {
+  const bruto = String(req.get('authorization') || '');
+  const achado = /^Bearer\s+(\S+)$/i.exec(bruto);
+  return achado ? achado[1] : null;
+}
+
+async function sessaoPorToken(token) {
+  if (!token) return null;
+
+  const sessao = await db.sessions.findOne({ tokenHash: security.hashToken(token) });
+  if (!sessao) return null;
+
+  if (new Date(sessao.expiresAt) <= agora()) {
+    await db.sessions.remove({ _id: sessao._id }, {});
+    return null;
+  }
+
+  return sessao;
+}
+
+// O token da extensão é o mesmo formato da sessão web, guardado na mesma
+// coleção e com o mesmo hash SHA-256. A diferença é a origem: a extensão não
+// tem cookie, então manda `Authorization: Bearer` e o navegador nunca anexa
+// esse cabeçalho sozinho num ataque cross-site.
+async function criarTokenExtensao(userId) {
+  const token = security.novoToken(32);
+  const tokenHash = security.hashToken(token);
+
+  await db.sessions.insert({
+    _id: crypto.randomUUID(),
+    tokenHash,
+    userId,
+    escopo: 'extensao',
+    criadoEm: agora(),
+    expiresAt: addDays(agora(), config.TOKEN_EXTENSAO_DIAS)
+  });
+
+  await db.sessions.remove({ userId, escopo: 'extensao', tokenHash: { $ne: tokenHash } }, { multi: true });
+
+  return token;
+}
+
+async function usuarioPorToken(token) {
+  const sessao = await sessaoPorToken(token);
+  if (!sessao) return null;
+
+  const user = await db.users.findOne({ _id: sessao.userId });
+  if (!user || user.bloqueado) return null;
+
+  return user;
+}
+
+async function exigirToken(req, res, next) {
+  try {
+    const user = await usuarioPorToken(extrairBearer(req));
+    if (!user) {
+      return res.status(401).json({
+        erro: 'Faça login na extensão para continuar.',
+        codigo: 'nao_autenticado'
+      });
+    }
+    req.user = user;
+    req.acesso = await estadoDeAcesso(user);
+    next();
+  } catch (erro) {
+    next(erro);
+  }
+}
+
+async function exigirTokenComAcesso(req, res, next) {
+  try {
+    const user = await usuarioPorToken(extrairBearer(req));
+    const estado = await estadoDeAcesso(user);
+
+    if (!estado.permitido) {
+      return res.status(401).json({
+        erro: 'Faça login na extensão para continuar.',
+        codigo: 'nao_autenticado'
+      });
+    }
+
+    req.user = user;
+    req.acesso = estado;
+    next();
+  } catch (erro) {
+    next(erro);
+  }
+}
+
+async function encerrarToken(req) {
+  const token = extrairBearer(req);
+  if (!token) return;
+  await db.sessions.remove({ tokenHash: security.hashToken(token) }, {});
 }
 
 function aplicarSessao(res, token) {
@@ -206,12 +305,45 @@ async function autenticar({ email, senha }) {
     throw Object.assign(new Error('Esta conta está bloqueada. Fale com o suporte.'), { status: 403 });
   }
 
+  // O rate limit por IP segura uma origem. Isto segura a conta: quem tenta de
+  // vários endereços IP diferentes bate na mesma contagem e trava a conta.
+  if (user.bloqueadoAte && new Date(user.bloqueadoAte) > agora()) {
+    const minutos = Math.max(1, Math.ceil((new Date(user.bloqueadoAte) - agora()) / 60000));
+    log.warn('login_bloqueado', { userId: user._id, minutos });
+    throw Object.assign(
+      new Error(`Muitas tentativas erradas. Tente de novo em ${minutos} minuto${minutos > 1 ? 's' : ''}.`),
+      { status: 429, codigo: 'conta_bloqueada' }
+    );
+  }
+
   const confere = await bcrypt.compare(senhaTexto, user.senhaHash);
   if (!confere) {
+    const falhas = (user.loginFalhas || 0) + 1;
+    const update =
+      falhas >= config.LOGIN_FALHAS_MAX
+        ? {
+            loginFalhas: 0,
+            bloqueadoAte: addMinutos(agora(), config.LOGIN_BLOQUEIO_MINUTOS)
+          }
+        : { loginFalhas: falhas };
+
+    await db.users.update({ _id: user._id }, { $set: update });
+
+    if (falhas >= config.LOGIN_FALHAS_MAX) {
+      log.warn('conta_bloqueada_por_falhas', {
+        userId: user._id,
+        falhas,
+        minutos: config.LOGIN_BLOQUEIO_MINUTOS
+      });
+    }
+
     throw Object.assign(new Error('E-mail ou senha incorretos.'), { status: 401 });
   }
 
-  await db.users.update({ _id: user._id }, { $set: { ultimoAcessoEm: agora() } });
+  await db.users.update(
+    { _id: user._id },
+    { $set: { ultimoAcessoEm: agora() }, $unset: { loginFalhas: '', bloqueadoAte: '' } }
+  );
   return user;
 }
 
@@ -245,11 +377,17 @@ async function limparExpiradas() {
 module.exports = {
   agora,
   addDays,
+  addMinutos,
   normalizarEmail,
   emailValido,
   forcaSenha,
   eAdmin,
   criarSessao,
+  criarTokenExtensao,
+  usuarioPorToken,
+  exigirToken,
+  exigirTokenComAcesso,
+  encerrarToken,
   aplicarSessao,
   encerrarSessao,
   usuarioAtual,

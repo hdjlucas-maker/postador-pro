@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const config = require('./config');
 const log = require('./log');
+const security = require('./security');
 
 const CSP = [
   "default-src 'self'",
@@ -45,19 +46,42 @@ function parseCookies(req, res, next) {
   next();
 }
 
+// A extensão lê a API de outra origem. Com `same-origin` o navegador descarta
+// a resposta antes de a extensão ver o conteúdo, então só as rotas de API
+// liberam a leitura. As páginas HTML seguem restritas a si mesmas.
 function cabecalhosSeguranca(req, res, next) {
+  const ehApi = req.path === '/api' || req.path.startsWith('/api/');
   res.setHeader('Content-Security-Policy', CSP);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', ehApi ? 'cross-origin' : 'same-origin');
   if (config.COOKIE_SECURE) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   res.removeHeader('X-Powered-By');
   next();
+}
+
+// CORS só para as extensões autorizadas. Uma página comum não ganha cabeçalho
+// nenhum daqui, e continua validada por `aplicarOrigem` + CSRF.
+function corsExtensao(req, res, next) {
+  const origem = req.get('origin');
+  if (!origem || !security.origemExtensaoPermitida(origem)) return next();
+
+  res.setHeader('Access-Control-Allow-Origin', origem);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '600');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
+  return next();
 }
 
 function naoCacheApi(req, res, next) {
@@ -112,6 +136,7 @@ module.exports = {
   CSP,
   parseCookies,
   cabecalhosSeguranca,
+  corsExtensao,
   naoCacheApi,
   loggerHttp,
   estaticos,

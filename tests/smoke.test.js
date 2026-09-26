@@ -3,9 +3,12 @@
 /**
  * Testes de fumaça do Postador Pro.
  *
- * Sobe a aplicação no próprio processo, com um diretório de dados temporário,
- * e valida o contrato da API: autenticação, isolamento entre usuários, limites
- * de plano, CSRF, exposição de arquivos, fila, uploads, cobrança e admin.
+ * Sobe a API de licença no próprio processo, com um diretório de dados
+ * temporário, e valida o contrato: autenticação, isolamento entre usuários,
+ * limites de plano, CSRF, exposição de arquivos, cobrança e admin.
+ *
+ * Não publica em grupo nenhum. A publicação é responsabilidade da extensão,
+ * no navegador do cliente, e não tem como ser testada aqui.
  *
  * Uso: npm test
  */
@@ -16,18 +19,16 @@ const path = require('path');
 
 const PORTA = Number(process.env.TEST_PORT || 3199);
 const BASE = `http://127.0.0.1:${PORTA}`;
-const RAIZ = path.resolve(__dirname, '..');
 const DATA_DIR = path.join(os.tmpdir(), `postador-teste-${Date.now()}`);
 
 const ADMIN_EMAIL = 'admin@postador.local';
+const SENHA_ADMIN = 'senhaforte123';
 
 process.env.NODE_ENV = 'test';
 process.env.PORT = String(PORTA);
 process.env.HOST = '127.0.0.1';
 process.env.PUBLIC_BASE_URL = BASE;
 process.env.DATA_DIR = DATA_DIR;
-process.env.FILA_INTERVALO_SEGUNDOS = '2';
-process.env.MAX_NAVEGADORES_CONCORRENTES = '1';
 process.env.ADMIN_EMAILS = ADMIN_EMAIL;
 process.env.EXPOSIR_LINK_REDEFINICAO = '1';
 process.env.INFINITEPAY_HANDLE = '';
@@ -43,12 +44,20 @@ process.env.RATE_LIMIT_REDEFINIR = '1000';
 process.env.RATE_LIMIT_EXCLUIR_CONTA = '1000';
 process.env.RATE_LIMIT_LOGIN = '500';
 
+// Extensão liberada nos testes. O ID precisa ter 32 caracteres de a-p, que é o
+// formato que o Chrome gera, para passar pela validação de origem.
+const EXTENSAO_ID = 'abcdefghijklmnopabcdefghijklmnop';
+const OUTRA_EXTENSAO_ID = 'ponmlkjihgfedcbaponmlkjihgfedcba';
+process.env.EXTENSAO_IDS = `${EXTENSAO_ID},${OUTRA_EXTENSAO_ID}`;
+process.env.TOKEN_EXTENSAO_DIAS = '30';
+
+// Trava de conta em 3 falhas para o teste caber em tempo razoável.
+process.env.LOGIN_FALHAS_MAX = '3';
+process.env.LOGIN_BLOQUEIO_MINUTOS = '15';
+
 const dbMod = require('../src/db');
 const billing = require('../src/billing');
-const queue = require('../src/queue');
 const config = require('../src/config');
-const cron = require('node-cron');
-const { expressaoACadaMinutos } = require('../src/cron-agenda');
 const { criarApp } = require('../src/app');
 
 const { db } = dbMod;
@@ -57,6 +66,7 @@ let servidor;
 let passo = 0;
 let totalPassos = 0;
 const falhas = [];
+let tokenExtensao = null;
 
 function log(mensagem) {
   console.log(mensagem);
@@ -172,67 +182,11 @@ async function novoClienteComConta(nome = 'Cliente Teste', { email } = {}) {
   return { cliente, user: r.dados };
 }
 
-async function criarContaFake(userId, nome = 'Conta FB') {
-  const accountId = `acc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  await db.accounts.insert({ _id: accountId, userId, nome, conectada: true, criadoEm: new Date() });
-  return accountId;
-}
-
-function daqui(horas = 2) {
-  return new Date(Date.now() + horas * 3600000).toISOString();
-}
-
-const PNG_1PX =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-
 /* ------------------------------------------------------------------ *
  * Suíte
  * ------------------------------------------------------------------ */
 
 async function suite() {
-  log('\n== Agendamentos ==');
-
-  await checar('gera expressões de cron aceitas pelo node-cron', async () => {
-    for (const minutos of [1, 5, 15, 30, 45, 60, 90, 120, 360, 720, 1440]) {
-      const expressao = expressaoACadaMinutos(minutos);
-      afirmar(
-        cron.validate(expressao),
-        `${minutos} min virou "${expressao}", que o node-cron não aceita`
-      );
-    }
-  });
-
-  await checar('a expression de 6 horas é válida (o bug do */360)', async () => {
-    // `*/360 * * * *` nunca casa com nada: o backup simplesmente não rodava.
-    const expressao = expressaoACadaMinutos(360);
-    afirmar(expressao === '0 */6 * * *', `expressão inesperada: ${expressao}`);
-    afirmar(cron.validate(expressao), 'node-cron recusou a expressão de 6 horas');
-  });
-
-  await checar('o padrão de backup do app vira uma expressão válida', async () => {
-    for (const [nome, minutos] of [
-      ['BACKUP_MINUTOS', config.BACKUP_MINUTOS],
-      ['COMPACTACAO_MINUTOS', config.COMPACTACAO_MINUTOS]
-    ]) {
-      afirmar(
-        cron.validate(expressaoACadaMinutos(minutos)),
-        `${nome}=${minutos} não gera uma expressão válida`
-      );
-    }
-  });
-
-  await checar('recusa intervalo de manutenção impossível', async () => {
-    for (const invalido of [0, -10, 1441, 99999, 'abc']) {
-      let lancou = false;
-      try {
-        expressaoACadaMinutos(invalido);
-      } catch (erro) {
-        lancou = erro instanceof RangeError;
-      }
-      afirmar(lancou, `aceitou intervalo inválido: ${invalido}`);
-    }
-  });
-
   log('\n== Exposição de arquivos ==');
 
   await checar('não serve sessions.db', async () => {
@@ -261,7 +215,7 @@ async function suite() {
   });
 
   await checar('não serve o diretório de dados', async () => {
-    for (const alvo of ['/data/', '/data/users.db', '/facebook-profiles/', '/data/facebook-profiles/']) {
+    for (const alvo of ['/data/', '/data/users.db', '/data/backups/']) {
       const r = await fetch(`${BASE}${alvo}`);
       afirmar(r.status === 404, `${alvo} respondeu ${r.status}`);
     }
@@ -271,7 +225,8 @@ async function suite() {
     const r = await fetch(`${BASE}/`);
     const corpo = await r.text();
     afirmar(r.status === 200, `respondeu ${r.status}`);
-    afirmar(corpo.includes('POSTADOR'), 'interface sem a marca do produto');
+    afirmar(/postador/i.test(corpo), 'interface sem a marca do produto');
+    afirmar(corpo.includes('estilo.css'), 'interface sem a folha de estilo');
   });
 
   await checar('envolve tudo com CSP estrita para scripts', async () => {
@@ -295,14 +250,97 @@ async function suite() {
 
   await checar('a interface não tem script nem style inline', async () => {
     const corpo = await (await fetch(`${BASE}/`)).text();
-    afirmar(!/<script[^>]*>[\s\S]*?\S[\s\S]*?<\/script>/.test(corpo), 'há script inline no HTML');
-    afirmar(!/<style[\s\S]*\S[\s\S]*<\/style>/.test(corpo), 'há style inline no HTML');
+
+    // Cada tag `<script>` é conferida por conta própria. Um regex único com
+    // `[\s\S]*` atravessa o `</script>` de uma tag e casa com a próxima, dando
+    // falso positivo sempre que há mais de um script externo na página.
+    const tags = corpo.match(/<script\b[^>]*>[\s\S]*?<\/script>/gi) || [];
+
+    for (const tag of tags) {
+      const abertura = tag.match(/^<script\b([^>]*)>/i)[1];
+      const corpoDaTag = tag.replace(/^<script\b[^>]*>/i, '').replace(/<\/script>$/i, '');
+
+      afirmar(!corpoDaTag.trim(), `script inline: ${tag.slice(0, 60)}`);
+      afirmar(!/on\w+\s*=/i.test(abertura), `handler inline em <script>: ${abertura}`);
+      afirmar(
+        abertura === '' || /^\s*src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)\s*$/.test(abertura),
+        `<script> com atributo inesperado: ${abertura}`
+      );
+    }
+
+    afirmar(!/<style\b[^>]*>[\s\S]*\S[\s\S]*<\/style>/i.test(corpo), 'há style inline no HTML');
+    afirmar(!/\son\w+\s*=\s*"/i.test(corpo), 'há handler inline em atributo');
   });
+
+  log('\n== Rotas que não devem existir ==');
+  // A publicação é feita pela extensão. Se alguma dessas rotas voltar, alguém
+  // recriou a arquitetura que foi removida.
+
+  for (const [metodo, rota] of [
+    ['GET', '/api/campaigns'],
+    ['GET', '/api/dashboard'],
+    ['GET', '/api/facebook/accounts'],
+    ['GET', '/api/uploads']
+  ]) {
+    await checar(`${metodo} ${rota} responde 404`, async () => {
+      const r = await fetch(`${BASE}${rota}`);
+      afirmar(r.status === 404, `respondeu ${r.status}`);
+    });
+  }
 
   log('\n== Proteção de requisições ==');
   // O teste de limite de login fica no fim da suíte: ele esgota o orçamento de
   // tentativas por IP e, se rodar antes, bloquearia os logins dos testes
   // seguintes.
+
+  await checar('origem da extensão autorizada passa, as outras não', async () => {
+    const comExtensao = await fetch(`${BASE}/api/extensao/planos`, {
+      headers: { Origin: `chrome-extension://${EXTENSAO_ID}` }
+    });
+    afirmar(comExtensao.status === 200, `extensão autorizada respondeu ${comExtensao.status}`);
+    afirmar(
+      comExtensao.headers.get('access-control-allow-origin') === `chrome-extension://${EXTENSAO_ID}`,
+      'CORS não liberou a extensão autorizada'
+    );
+
+    const comDesconhecida = await fetch(`${BASE}/api/extensao/planos`, {
+      headers: { Origin: 'chrome-extension://qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq' }
+    });
+    afirmar(
+      comDesconhecida.headers.get('access-control-allow-origin') === null,
+      'CORS liberou uma extensão fora da lista'
+    );
+
+    const daWeb = await fetch(`${BASE}/api/extensao/planos`, { headers: { Origin: BASE } });
+    afirmar(daWeb.headers.get('access-control-allow-origin') === null, 'CORS liberou a própria web');
+  });
+
+  await checar('API libera leitura para a extensão, HTML não', async () => {
+    const api = await fetch(`${BASE}/api/health`);
+    afirmar(
+      api.headers.get('cross-origin-resource-policy') === 'cross-origin',
+      `API com CORP ${api.headers.get('cross-origin-resource-policy')}`
+    );
+
+    const pagina = await fetch(`${BASE}/`);
+    afirmar(
+      pagina.headers.get('cross-origin-resource-policy') === 'same-origin',
+      `HTML com CORP ${pagina.headers.get('cross-origin-resource-policy')}`
+    );
+  });
+
+  await checar('estado do sistema só para administrador', async () => {
+    const anonimo = await fetch(`${BASE}/api/estado`);
+    afirmar(anonimo.status === 401, `sem login respondeu ${anonimo.status}`);
+
+    const comum = novoCliente();
+    await comum.req('GET', '/api/config');
+    await comum.req('POST', '/api/register', {
+      body: { nome: 'Comum', email: emailUnico('estado'), senha: 'senhaforte123' }
+    });
+    const naoAdmin = await comum.req('GET', '/api/estado');
+    afirmar(naoAdmin.status === 403, `usuário comum respondeu ${naoAdmin.status}`);
+  });
 
   await checar('bloqueia POST sem cookie de CSRF', async () => {
     const r = await fetch(`${BASE}/api/register`, {
@@ -377,8 +415,8 @@ async function suite() {
     afirmarIgual(user.statusPagamento, 'trial', 'status inicial errado');
     const dias = Math.round((new Date(user.trialFim) - Date.now()) / 86400000);
     afirmar(dias === 7, `esperava 7 dias de avaliação, veio ${dias}`);
-    afirmar(user.limites.contas === 1, 'limite de contas do trial errado');
-    afirmar(user.limites.campanhasAtivas === 3, 'limite de campanhas do trial errado');
+    afirmarIgual(user.limites.gruposPorDia, config.PLAN_LIMITS.trial.gruposPorDia, 'limite de grupos do trial errado');
+    afirmarIgual(user.limites.campanhasAtivas, 3, 'limite de campanhas do trial errado');
   });
 
   await checar('recusa senha com menos de 8 caracteres', async () => {
@@ -485,7 +523,10 @@ async function suite() {
     const pedido = await cliente.req('POST', '/api/recuperar-senha', { body: { email } });
     const token = new URL(pedido.dados.linkDev).searchParams.get('token');
 
-    await db.resets.update({ tokenHash: require('crypto').createHash('sha256').update(token).digest('hex') }, { $set: { expiraEm: new Date(Date.now() - 1000) } });
+    await db.resets.update(
+      { tokenHash: require('crypto').createHash('sha256').update(token).digest('hex') },
+      { $set: { expiraEm: new Date(Date.now() - 1000) } }
+    );
 
     const r = await cliente.req('POST', '/api/redefinir-senha', { body: { token, novaSenha: 'novasenha456' } });
     afirmar(r.status === 400, `respondeu ${r.status}`);
@@ -493,95 +534,25 @@ async function suite() {
 
   log('\n== Limites de plano e expiração ==');
 
-  await checar('bloqueia campanha acima do limite de destinos do trial', async () => {
-    const { cliente, user } = await novoClienteComConta('Limite');
-    const accountId = await criarContaFake(user.id);
-
-    const destinos = Array.from({ length: 21 }, (_, i) => `https://facebook.com/groups/g${i}`);
-    const r = await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Grande', accountId, destinos, textos: ['oi'], imagens: [], dataExecucao: daqui() }
-    });
-    afirmar(r.status === 403, `esperava 403, veio ${r.status}: ${JSON.stringify(r.dados)}`);
-  });
-
-  await checar('bloqueia excesso de campanhas ativas no trial', async () => {
-    const { cliente, user } = await novoClienteComConta('Ativas');
-    const accountId = await criarContaFake(user.id);
-
-    for (let i = 0; i < 3; i++) {
-      const r = await cliente.req('POST', '/api/campaigns', {
-        body: { nome: `Ativa ${i}`, accountId, destinos: ['https://facebook.com/groups/x'], textos: ['oi'], imagens: [], dataExecucao: daqui() }
-      });
-      afirmar(r.status === 201, `campanha ${i} falhou: ${JSON.stringify(r.dados)}`);
-    }
-
-    const extra = await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Extra', accountId, destinos: ['https://facebook.com/groups/x'], textos: ['oi'], imagens: [], dataExecucao: daqui() }
-    });
-    afirmar(extra.status === 403, `esperava 403, veio ${extra.status}`);
-  });
-
-  await checar('recusa destino fora do Facebook', async () => {
-    const { cliente, user } = await novoClienteComConta('Destino');
-    const accountId = await criarContaFake(user.id);
-
-    const r = await cliente.req('POST', '/api/campaigns', {
-      body: {
-        nome: 'Ruim',
-        accountId,
-        destinos: ['https://exemplo-malicioso.example/grupo'],
-        textos: ['oi'],
-        imagens: [],
-        dataExecucao: daqui()
-      }
-    });
-    afirmar(r.status === 400, `respondeu ${r.status}`);
-  });
-
-  await checar('recusa agendamento no passado', async () => {
-    const { cliente, user } = await novoClienteComConta('Passado');
-    const accountId = await criarContaFake(user.id);
-
-    const r = await cliente.req('POST', '/api/campaigns', {
-      body: {
-        nome: 'Passado',
-        accountId,
-        destinos: ['https://facebook.com/groups/x'],
-        textos: ['oi'],
-        imagens: [],
-        dataExecucao: new Date(Date.now() - 3600000).toISOString()
-      }
-    });
-    afirmar(r.status === 400, `respondeu ${r.status}`);
-  });
-
-  await checar('recusa conta do Facebook de outro usuário', async () => {
-    const { user } = await novoClienteComConta('Dono');
-    const intruso = await novoClienteComConta('Intruso');
-    const contaDoDono = await criarContaFake(user.id);
-
-    const criar = await intruso.cliente.req('POST', '/api/campaigns', {
-      body: {
-        nome: 'Invasão',
-        accountId: contaDoDono,
-        destinos: ['https://facebook.com/groups/x'],
-        textos: ['oi'],
-        imagens: [],
-        dataExecucao: daqui()
-      }
-    });
-    afirmar(criar.status === 404, `esperava 404, veio ${criar.status}`);
+  await checar('a configuração pública traz planos e limites', async () => {
+    const cliente = novoCliente();
+    const r = await cliente.req('GET', '/api/config');
+    afirmar(r.status === 200, `respondeu ${r.status}`);
+    afirmar(r.dados.planos.length === 2, 'esperava os planos mensal e anual');
+    afirmar(r.dados.planos.map(p => p.id).includes('monthly'), 'plano mensal ausente');
+    afirmar(r.dados.planos.map(p => p.id).includes('annual'), 'plano anual ausente');
+    afirmar(r.dados.limites.trial.gruposPorDia > 0, 'limite de grupos do trial não veio');
+    afirmar(r.dados.limites.pro.gruposPorDia > r.dados.limites.trial.gruposPorDia, 'o plano pro não tem limite maior que o trial');
   });
 
   await checar('expira o acesso quando a avaliação termina', async () => {
     const { cliente, user } = await novoClienteComConta('Expirado');
     await db.users.update({ _id: user.id }, { $set: { trialFim: new Date(Date.now() - 1000) } });
 
-    const dash = await cliente.req('GET', '/api/dashboard');
-    afirmar(dash.status === 402, `dashboard deveria responder 402, veio ${dash.status}`);
-
     const sub = await cliente.req('GET', '/api/subscription');
+    afirmar(sub.status === 200, `respondeu ${sub.status}`);
     afirmarIgual(sub.dados.status, 'expirado', 'status de acesso errado');
+    afirmarIgual(sub.dados.ativo, false, 'acesso expirado ainda consta como ativo');
   });
 
   await checar('usuário pro vê os limites do plano pago', async () => {
@@ -593,415 +564,27 @@ async function suite() {
 
     const me = await cliente.req('GET', '/api/me');
     afirmarIgual(me.dados.statusPagamento, 'pro', 'status pro errado');
-    afirmarIgual(me.dados.limites.contas, 10, 'limite de contas do pro errado');
+    afirmarIgual(me.dados.limites.gruposPorDia, config.PLAN_LIMITS.pro.gruposPorDia, 'limite de grupos do pro errado');
     afirmarIgual(me.dados.limites.destinosPorCampanha, 100, 'limite de destinos do pro errado');
   });
 
-  log('\n== Campanhas ==');
-
-  await checar('cria campanha e gera um destino por grupo, sem repetir', async () => {
-    const { cliente, user } = await novoClienteComConta('Cria');
-    const accountId = await criarContaFake(user.id);
-
-    const r = await cliente.req('POST', '/api/campaigns', {
-      body: {
-        nome: 'Válida',
-        accountId,
-        destinos: ['https://facebook.com/groups/a', 'https://facebook.com/groups/b', 'https://facebook.com/groups/a'],
-        textos: ['um', 'dois'],
-        imagens: [],
-        dataExecucao: daqui()
-      }
-    });
-
-    afirmar(r.status === 201, `esperava 201, veio ${r.status}: ${JSON.stringify(r.dados)}`);
-    afirmarIgual(r.dados.destinos, 2, 'destino repetido não foi eliminado');
-
-    const posts = await db.posts.find({ userId: user.id });
-    afirmarIgual(posts.length, 2, 'fila não criou um item por destino');
-
-    const lista = await cliente.req('GET', '/api/campaigns');
-    afirmarIgual(lista.dados.campanhas[0].status, 'pendente', 'status inicial errado');
-    afirmar(lista.dados.campanhas[0].listaDestinos.length === 2, 'lista de destinos incorreta');
-  });
-
-  await checar('edita campanha pendente e recria os destinos', async () => {
-    const { cliente, user } = await novoClienteComConta('Edita');
-    const accountId = await criarContaFake(user.id);
-
-    const criada = await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Antes', accountId, destinos: ['https://facebook.com/groups/a'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-
-    const r = await cliente.req('PUT', `/api/campaigns/${criada.dados.id}`, {
-      body: {
-        nome: 'Depois',
-        accountId,
-        destinos: ['https://facebook.com/groups/c', 'https://facebook.com/groups/d'],
-        textos: ['dois'],
-        imagens: [],
-        dataExecucao: daqui()
-      }
-    });
-
-    afirmar(r.status === 200, `esperava 200, veio ${r.status}: ${JSON.stringify(r.dados)}`);
-
-    const posts = await db.posts.find({ userId: user.id });
-    afirmarIgual(posts.length, 2, 'destinos não foram recriados');
-    afirmar(posts.every(p => p.campanhaNome === 'Depois'), 'posts continuam com o nome antigo');
-  });
-
-  await checar('não edita campanha já executada', async () => {
-    const { cliente, user } = await novoClienteComConta('Travada');
-    const accountId = await criarContaFake(user.id);
-
-    const criada = await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Travada', accountId, destinos: ['https://facebook.com/groups/a'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-
-    await db.campaigns.update({ _id: criada.dados.id }, { $set: { status: 'concluido' } });
-
-    const r = await cliente.req('PUT', `/api/campaigns/${criada.dados.id}`, {
-      body: { nome: 'Mudou', accountId, destinos: ['https://facebook.com/groups/z'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-    afirmar(r.status === 400, `esperava 400, veio ${r.status}`);
-  });
-
-  await checar('cancela campanha e cancela os destinos pendentes', async () => {
-    const { cliente, user } = await novoClienteComConta('Cancela');
-    const accountId = await criarContaFake(user.id);
-
-    const criada = await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Cancelar', accountId, destinos: ['https://facebook.com/groups/a', 'https://facebook.com/groups/b'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-
-    const r = await cliente.req('POST', `/api/campaigns/${criada.dados.id}/cancel`, { body: {} });
-    afirmar(r.status === 200, `veio ${r.status}`);
-
-    const posts = await db.posts.find({ userId: user.id });
-    afirmar(posts.every(p => p.status === 'cancelado'), 'destinos ficaram pendentes');
-    afirmarPosts(posts, 'cancelado');
-  });
-
-  await checar('reprocessa apenas destinos com falha', async () => {
-    const { cliente, user } = await novoClienteComConta('Reprocessa');
-    const accountId = await criarContaFake(user.id);
-
-    const criada = await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Reprocessar', accountId, destinos: ['https://facebook.com/groups/a', 'https://facebook.com/groups/b'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-
-    await db.posts.update({ userId: user.id }, { $set: { status: 'concluido' } });
-    await db.posts.update({ userId: user.id, grupoUrl: 'https://facebook.com/groups/b' }, { $set: { status: 'falhou', motivo: 'erro' } });
-
-    const r = await cliente.req('POST', `/api/campaigns/${criada.dados.id}/retry`, { body: {} });
-    afirmar(r.status === 200, `veio ${r.status}`);
-    afirmarIgual(r.dados.reenviados, 1, 'reenviou destinos que já tinham sido publicados');
-
-    const posts = await db.posts.find({ userId: user.id });
-    const republicado = posts.find(p => p.grupoUrl === 'https://facebook.com/groups/a');
-    afirmarIgual(republicado.status, 'concluido', 'publicação concluída foi sobrescrita');
-  });
-
-  await checar('exclui campanha e remove destinos e imagens', async () => {
-    const { cliente, user } = await novoClienteComConta('Exclui');
-    const accountId = await criarContaFake(user.id);
-
-    const up = await cliente.req('POST', '/api/uploads', { body: { data: `data:image/png;base64,${PNG_1PX}` } });
-    afirmar(up.status === 201, `upload falhou: ${JSON.stringify(up.dados)}`);
-
-    const criada = await cliente.req('POST', '/api/campaigns', {
-      body: {
-        nome: 'Excluir',
-        accountId,
-        destinos: ['https://facebook.com/groups/a'],
-        textos: ['um'],
-        imagens: [up.dados.nome],
-        dataExecucao: daqui()
-      }
-    });
-
-    const r = await cliente.req('DELETE', `/api/campaigns/${criada.dados.id}`);
-    afirmar(r.status === 200, `veio ${r.status}`);
-    afirmarIgual((await db.campaigns.find({ userId: user.id })).length, 0, 'campanha sobrou');
-    afirmarIgual((await db.posts.find({ userId: user.id })).length, 0, 'destinos sobraram');
-  });
-
-  await checar('isola campanhas entre usuários', async () => {
-    const dono = await novoClienteComConta('Dono');
-    const intruso = await novoClienteComConta('Intruso');
-    const accountId = await criarContaFake(dono.user.id);
-
-    const criada = await dono.cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Privada', accountId, destinos: ['https://facebook.com/groups/a'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-
-    const ver = await intruso.cliente.req('GET', `/api/campaigns/${criada.dados.id}`);
-    afirmar(ver.status === 404, `esperava 404, veio ${ver.status}`);
-
-    const apagar = await intruso.cliente.req('DELETE', `/api/campaigns/${criada.dados.id}`);
-    afirmar(apagar.status === 404, `esperava 404 no delete, veio ${apagar.status}`);
-
-    const lista = await intruso.cliente.req('GET', '/api/campaigns');
-    afirmar(lista.dados.campanhas.every(c => c.id !== criada.dados.id), 'vazou campanha na lista');
-  });
-
-  log('\n== Contas do Facebook ==');
-
-  await checar('aplica o limite de contas do plano', async () => {
-    const { cliente, user } = await novoClienteComConta('Contas');
-    await criarContaFake(user.id, 'Conta 1');
-
-    const r = await cliente.req('POST', '/api/facebook/accounts', { body: { nome: 'Conta 2' } });
-    afirmar(r.status === 403, `esperava 403 no trial com 1 conta, veio ${r.status}`);
-  });
-
-  await checar('renomeia a conta e propaga para o histórico', async () => {
-    const { cliente, user } = await novoClienteComConta('Renomeia');
-    const accountId = await criarContaFake(user.id, 'Nome Antigo');
-
-    const criada = await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Com conta', accountId, destinos: ['https://facebook.com/groups/a'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-    afirmar(criada.status === 201, 'campanha não criada');
-
-    const r = await cliente.req('PATCH', `/api/facebook/accounts/${accountId}`, { body: { nome: 'Nome Novo' } });
-    afirmar(r.status === 200, `veio ${r.status}: ${JSON.stringify(r.dados)}`);
-
-    const campanha = await db.campaigns.findOne({ _id: criada.dados.id });
-    afirmarIgual(campanha.perfilId, 'Nome Novo', 'campanha ficou com o nome antigo');
-    const post = await db.posts.findOne({ userId: user.id });
-    afirmarIgual(post.perfilId, 'Nome Novo', 'histórico ficou com o nome antigo');
-  });
-
-  await checar('não deixa desconectar conta com campanha ativa', async () => {
-    const { cliente, user } = await novoClienteComConta('Desconecta');
-    const accountId = await criarContaFake(user.id);
-
-    await cliente.req('POST', '/api/campaigns', {
-      body: { nome: 'Ativa', accountId, destinos: ['https://facebook.com/groups/a'], textos: ['um'], imagens: [], dataExecucao: daqui() }
-    });
-
-    const r = await cliente.req('DELETE', `/api/facebook/accounts/${accountId}`);
-    afirmar(r.status === 400, `esperava 400, veio ${r.status}`);
-  });
-
-  log('\n== Uploads ==');
-
-  await checar('recusa arquivo disfarçado de imagem', async () => {
-    const { cliente } = await novoClienteComConta('Falso');
-    const r = await cliente.req('POST', '/api/uploads', { body: { data: 'data:image/png;base64,aGVsbG8gd29ybGQ=' } });
-    afirmar(r.status === 400, `esperava 400, veio ${r.status}`);
-  });
-
-  await checar('salva imagem válida e protege o acesso de terceiros', async () => {
-    const dono = await novoClienteComConta('DonoImg');
-    const outro = await novoClienteComConta('OutroImg');
-
-    const up = await dono.cliente.req('POST', '/api/uploads', { body: { data: `data:image/png;base64,${PNG_1PX}` } });
-    afirmar(up.status === 201, `esperava 201, veio ${up.status}: ${JSON.stringify(up.dados)}`);
-
-    const url = up.dados.url;
-    afirmar(url.startsWith('/api/uploads/'), 'URL de upload inesperada');
-
-    const donoAcessa = await dono.cliente.texto(url);
-    afirmar(donoAcessa.status === 200, `dono recebeu ${donoAcessa.status}`);
-
-    const terceiro = await outro.cliente.texto(url);
-    afirmar(terceiro.status === 403, `terceiro recebeu ${terceiro.status}`);
-
-    const anonimo = await fetch(`${BASE}${url}`);
-    afirmar(anonimo.status === 401, `anônimo recebeu ${anonimo.status}`);
-  });
-
-  await checar('impede travessia de caminho na leitura de upload', async () => {
-    const dono = await novoClienteComConta('Travessia');
-    for (const tentativa of ['..%2F..%2Fpackage.json', '..%2Fusers.db', 'package.json']) {
-      const r = await dono.cliente.texto(`/api/uploads/${tentativa}`);
-      afirmar(r.status === 404 || r.status === 403, `${tentativa} respondeu ${r.status}`);
-    }
-  });
-
-  log('\n== Histórico ==');
-
-  await checar('pagina, filtra e exporta o histórico', async () => {
-    const { cliente, user } = await novoClienteComConta('Historico');
-
-    const campanhaId = `camp-${Date.now()}`;
-    for (let i = 0; i < 7; i++) {
-      await db.posts.insert({
-        _id: `post-${Date.now()}-${i}-${Math.random()}`,
-        userId: user.id,
-        campanhaId,
-        campanhaNome: 'Histórico',
-        perfilId: 'Conta',
-        accountId: `acc-${i}`,
-        profileDir: 'x',
-        grupoUrl: `https://facebook.com/groups/g${i}`,
-        textos: ['t'],
-        imagens: [],
-        dataExecucao: new Date(),
-        status: i % 2 ? 'concluido' : 'falhou',
-        tentativas: 1,
-        criadoEm: new Date()
-      });
-    }
-
-    const pagina1 = await cliente.req('GET', '/api/history?page=1&perPage=3');
-    afirmarIgual(pagina1.dados.posts.length, 3, 'tamanho de página errado');
-    afirmarIgual(pagina1.dados.total, 7, 'total errado');
-    afirmarIgual(pagina1.dados.totalPages, 3, 'total de páginas errado');
-
-    const filtrado = await cliente.req('GET', '/api/history?status=falhou');
-    afirmar(filtrado.dados.posts.length === 4, `filtro de status não filtrou (${filtrado.dados.posts.length})`);
-    afirmar(filtrado.dados.posts.every(p => p.status === 'falhou'), 'filtro trouxe status errado');
-
-    const porConta = await cliente.req('GET', '/api/history?accountId=acc-1');
-    afirmarIgual(porConta.dados.posts.length, 1, 'filtro por conta não filtrou');
-
-    const csv = await cliente.texto('/api/history/export.csv');
-    afirmar(csv.status === 200, `CSV respondeu ${csv.status}`);
-    afirmar(csv.corpo.includes('Destino'), 'CSV sem cabeçalho');
-    afirmar(csv.corpo.split('\r\n').length >= 8, 'CSV sem todas as linhas');
-  });
-
-  log('\n== Fila de publicação ==');
-
-  await checar('não publica nada de usuário sem acesso', async () => {
-    const { user } = await novoClienteComConta('SemAcesso');
-    const accountId = await criarContaFake(user.id);
-
-    await db.users.update({ _id: user.id }, { $set: { trialFim: new Date(Date.now() - 1000) } });
-
-    await db.posts.insert({
-      _id: `post-expirado-${Date.now()}`,
-      userId: user.id,
-      campanhaId: `camp-${Date.now()}`,
-      campanhaNome: 'Expirada',
-      perfilId: 'Conta',
-      accountId,
-      profileDir: 'x',
-      grupoUrl: 'https://facebook.com/groups/a',
-      textos: ['t'],
-      imagens: [],
-      dataExecucao: new Date(Date.now() - 1000),
-      status: 'pendente',
-      tentativas: 0,
-      criadoEm: new Date()
-    });
-
-    await queue.processar();
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const post = await db.posts.findOne({ userId: user.id });
-    afirmar(post.status === 'interrompido', `esperava interrompido, veio ${post.status}`);
-  });
-
-  await checar('publicação em processing vira interrompida na recuperação', async () => {
-    const id = `post-orfa-${Date.now()}`;
-    await db.posts.insert({
-      _id: id,
-      userId: 'fantasma',
-      campanhaId: `camp-orfa-${Date.now()}`,
-      campanhaNome: 'Órfã',
-      perfilId: 'Conta',
-      accountId: 'acc',
-      profileDir: 'x',
-      grupoUrl: 'https://facebook.com/groups/a',
-      textos: ['t'],
-      imagens: [],
-      dataExecucao: new Date(),
-      status: 'processando',
-      tentativas: 1,
-      criadoEm: new Date()
-    });
-
-    await queue.recuperarNoBoot();
-
-    const orfa = await db.posts.findOne({ _id: id });
-    afirmarIgual(orfa.status, 'interrompido', 'a órfã não foi marcada como interrompida');
-    afirmar(/reinício|Reprocessar/.test(orfa.motivo || ''), 'motivo não orienta o usuário');
-  });
-
-  await checar('não reexecuta a mesma publicação em paralelo', async () => {
-    const { user } = await novoClienteComConta('Paralelo');
-    const accountId = await criarContaFake(user.id);
-    const campanhaId = `camp-${Date.now()}`;
-
-    for (let i = 0; i < 3; i++) {
-      await db.posts.insert({
-        _id: `post-par-${Date.now()}-${i}`,
-        userId: user.id,
-        campanhaId,
-        campanhaNome: 'Paralela',
-        perfilId: 'Conta',
-        accountId,
-        profileDir: 'x',
-        grupoUrl: `https://facebook.com/groups/g${i}`,
-        textos: ['t'],
-        imagens: [],
-        dataExecucao: new Date(Date.now() - 60000),
-        status: 'pendente',
-        tentativas: 0,
-        criadoEm: new Date()
-      });
-    }
-
-    // Neste ambiente não há Chrome, então o executor falha e a fila agenda a
-    // retentativa. O que importa aqui é a atomicidade do grupo: os três
-    // destinos são tratados como uma execução só, cada um é tentado uma única
-    // vez e nenhum fica preso em "processando".
-    await queue.processar();
-
-    const inicio = Date.now();
-    let posts = [];
-    let processando = true;
-
-    while (Date.now() - inicio < 30000) {
-      posts = await db.posts.find({ userId: user.id, campanhaId });
-      processando = posts.some(p => p.status === queue.STATUS.PROCESSANDO);
-      if (!processando && posts.length === 3) break;
-      await new Promise(resolve => setTimeout(resolve, 250));
-    }
-
-    afirmar(posts.length === 3, `destinos sumiram da fila (${posts.length})`);
-    afirmar(!processando, 'o grupo ficou preso em processando');
-
-    const estados = new Set(posts.map(p => p.status));
-    afirmar(estados.size === 1, `destinos do mesmo grupo ficaram com estados diferentes: ${[...estados].join(', ')}`);
-
-    const tentativas = posts.map(p => p.tentativas || 0);
-    afirmar(
-      tentativas.every(t => t === 1),
-      `cada destino deveria ter sido tentado uma vez, vieram ${tentativas.join(', ')}`
-    );
-
-    const agendamentos = posts.map(p => p.proximaTentativaEm);
-    if (posts.every(p => p.status === queue.STATUS.PENDENTE)) {
-      // O grupo inteiro foi reagendado para o futuro. O jitter existe de
-      // propósito, então os horários não são idênticos.
-      afirmar(
-        agendamentos.every(a => a && new Date(a) > new Date()),
-        `nem todo o grupo foi reagendado: ${JSON.stringify(agendamentos)}`
-      );
-    }
-  });
-
-  await checar('respeita o intervalo mínimo de agendamento', async () => {
-    const { cliente, user } = await novoClienteComConta('Intervalo');
-    const accountId = await criarContaFake(user.id);
-
-    const r = await cliente.req('POST', '/api/campaigns', {
-      body: {
-        nome: 'Imediata',
-        accountId,
-        destinos: ['https://facebook.com/groups/a'],
-        textos: ['um'],
-        imagens: [],
-        dataExecucao: new Date(Date.now() + 30000).toISOString()
-      }
-    });
-    afirmar(r.status === 400, `esperava 400 para agendamento em 30s, veio ${r.status}`);
+  await checar('conta bloqueada perde a sessão e volta ao desbloquear', async () => {
+    const email = emailUnico('bloqueado');
+    const { cliente, user } = await novoClienteComConta('Bloqueado', { email });
+
+    await db.users.update({ _id: user.id }, { $set: { bloqueado: true } });
+
+    const me = await cliente.req('GET', '/api/me');
+    afirmar(me.status === 401, `conta bloqueada ainda tem sessão (${me.status})`);
+
+    // Bloqueado não tem sessão válida, então a painel recusa já na
+    // autenticação (401) ou na autorização (403). O que não pode é passar.
+    const painel = await cliente.req('GET', '/api/admin/overview');
+    afirmar([401, 403].includes(painel.status), `conta bloqueada chegou ao painel (${painel.status})`);
+
+    await db.users.update({ _id: user.id }, { $set: { bloqueado: false } });
+    const depois = await cliente.req('GET', '/api/me');
+    afirmar(depois.status === 200, 'não voltou ao normal depois de desbloquear');
   });
 
   log('\n== Cobrança ==');
@@ -1176,6 +759,8 @@ async function suite() {
     const overview = await admin.req('GET', '/api/admin/overview');
     afirmar(overview.status === 200, `overview respondeu ${overview.status}`);
     afirmar(overview.dados.usuarios.total > 0, 'contagem de usuários zerada');
+    afirmar(overview.dados.campanhas === undefined, 'o painel ainda fala em campanhas do servidor');
+    afirmar(overview.dados.contasFacebook === undefined, 'o painel ainda fala em contas do Facebook no servidor');
 
     const alvo = await novoClienteComConta('Alvo');
 
@@ -1224,21 +809,15 @@ async function suite() {
     afirmar(!exportado.corpo.includes(dono.user.email), 'a exportação trouxe dados de outro usuário');
   });
 
-  await checar('exclusão de conta apaga tudo do usuário', async () => {
+  await checar('exclusão de conta apaga tudo do usuário no servidor', async () => {
     const { cliente, user } = await novoClienteComConta('Some');
-    const accountId = await criarContaFake(user.id);
-    await db.campaigns.insert({
-      _id: `camp-${Date.now()}`,
+    await db.payments.insert({
+      _id: `pay-${Date.now()}`,
+      order_nsu: `ord-${Date.now()}`,
       userId: user.id,
-      nome: 'X',
-      perfilId: 'Conta',
-      accountId,
-      destinos: ['https://facebook.com/groups/a'],
-      textos: ['um'],
-      imagens: [],
-      dataExecucao: new Date(),
-      totalDestinos: 1,
-      status: 'concluido',
+      plan: 'monthly',
+      amount: 2500,
+      status: 'pending',
       criadoEm: new Date()
     });
 
@@ -1249,8 +828,8 @@ async function suite() {
     afirmar(r.status === 200, `veio ${r.status}: ${JSON.stringify(r.dados)}`);
 
     afirmar(!(await db.users.findOne({ _id: user.id })), 'usuário sobrou');
-    afirmarIgual((await db.campaigns.find({ userId: user.id })).length, 0, 'campanhas sobraram');
-    afirmarIgual((await db.accounts.find({ userId: user.id })).length, 0, 'contas do Facebook sobraram');
+    afirmarIgual((await db.payments.find({ userId: user.id })).length, 0, 'pagamentos sobraram');
+    afirmarIgual((await db.sessions.find({ userId: user.id })).length, 0, 'sessões sobraram');
   });
 
   await checar('limita requisições repetidas por IP', async () => {
@@ -1288,6 +867,140 @@ async function suite() {
     }
   });
 
+  log('\n== Extensão: token, licença e bloqueio de conta ==');
+
+  await checar('login da extensão devolve token e licença', async () => {
+    const origem = { Origin: `chrome-extension://${EXTENSAO_ID}` };
+    const r = await fetch(`${BASE}/api/extensao/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...origem },
+      body: JSON.stringify({ email: ADMIN_EMAIL, senha: SENHA_ADMIN })
+    });
+    const dados = await r.json();
+
+    afirmar(r.status === 200, `respondeu ${r.status}: ${dados.erro || ''}`);
+    afirmar(typeof dados.token === 'string' && dados.token.length >= 32, 'token curto ou ausente');
+    afirmar(dados.acesso?.permitido === true, 'admin sem acesso');
+    afirmar(dados.licenca?.email === ADMIN_EMAIL, 'licença sem o e-mail do usuário');
+    afirmar(typeof dados.licenca?.limites?.gruposPorDia === 'number', 'licença sem limites do plano');
+    afirmar(dados.licenca.senhaHash === undefined, 'a resposta vazou o hash da senha');
+
+    tokenExtensao = dados.token;
+  });
+
+  await checar('o token da extensão funciona sem cookie de sessão', async () => {
+    const semToken = await fetch(`${BASE}/api/extensao/licenca`);
+    afirmar(semToken.status === 401, `sem token respondeu ${semToken.status}`);
+
+    const r = await fetch(`${BASE}/api/extensao/licenca`, {
+      headers: { Authorization: `Bearer ${tokenExtensao}` }
+    });
+    const dados = await r.json();
+
+    afirmar(r.status === 200, `respondeu ${r.status}`);
+    afirmar(dados.licenca?.email === ADMIN_EMAIL, 'licença errada');
+    afirmar(r.headers.get('set-cookie') === null, 'a rota de token não deveria emitir cookie');
+  });
+
+  await checar('token inventado e token de outra conta não passam', async () => {
+    const falso = await fetch(`${BASE}/api/extensao/licenca`, {
+      headers: { Authorization: 'Bearer aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }
+    });
+    afirmar(falso.status === 401, `token falso respondeu ${falso.status}`);
+
+    const malformado = await fetch(`${BASE}/api/extensao/licenca`, {
+      headers: { Authorization: 'Token nao-e-bearer' }
+    });
+    afirmar(malformado.status === 401, `esquema errado respondeu ${malformado.status}`);
+  });
+
+  await checar('token válido pula CSRF, mas origem errada sem token não passa', async () => {
+    const comToken = await fetch(`${BASE}/api/extensao/sair`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokenExtensao}`, Origin: 'https://malicioso.example' }
+    });
+    afirmar(comToken.status === 200, `com token respondeu ${comToken.status}`);
+
+    // O token foi encerrado acima; o mesmo caminho sem token tem de ser barrado.
+    const semToken = await fetch(`${BASE}/api/extensao/sair`, {
+      method: 'POST',
+      headers: { Origin: 'https://malicioso.example' }
+    });
+    afirmar(semToken.status === 403, `sem token e origem externa respondeu ${semToken.status}`);
+  });
+
+  await checar('token encerrado não volta a valer', async () => {
+    const r = await fetch(`${BASE}/api/extensao/licenca`, {
+      headers: { Authorization: `Bearer ${tokenExtensao}` }
+    });
+    afirmar(r.status === 401, `token revogado respondeu ${r.status}`);
+    tokenExtensao = null;
+  });
+
+  await checar('cadastro pela extensão já devolve token', async () => {
+    const r = await fetch(`${BASE}/api/extensao/cadastro`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: `chrome-extension://${EXTENSAO_ID}` },
+      body: JSON.stringify({ nome: 'Extensao', email: emailUnico('ext'), senha: 'senhaforte123' })
+    });
+    const dados = await r.json();
+
+    afirmar(r.status === 201, `respondeu ${r.status}: ${dados.erro || ''}`);
+    afirmar(typeof dados.token === 'string', 'cadastro não devolveu token');
+    afirmar(dados.acesso?.status === 'trial', `avaliação não aplicada: ${dados.acesso?.status}`);
+
+    await fetch(`${BASE}/api/extensao/sair`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${dados.token}` }
+    });
+  });
+
+  await checar('checkout exige token válido', async () => {
+    const anonimo = await fetch(`${BASE}/api/extensao/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: `chrome-extension://${EXTENSAO_ID}` },
+      body: JSON.stringify({ plano: 'monthly' })
+    });
+    afirmar(anonimo.status === 401, `sem token respondeu ${anonimo.status}`);
+  });
+
+  await checar('planos da extensão são públicos e não vazam usuário', async () => {
+    const r = await fetch(`${BASE}/api/extensao/planos`);
+    const dados = await r.json();
+
+    afirmar(r.status === 200, `respondeu ${r.status}`);
+    afirmar(dados.planos?.length === 2, 'não devolveu os dois planos');
+    afirmar(dados.planos.every(p => typeof p.preco === 'number'), 'plano sem preço');
+    afirmar(dados.limites?.pro?.gruposPorDia > 0, 'sem limites do plano Pro');
+    afirmar(dados.usuarios === undefined && dados.token === undefined, 'a vitrine pública vazou dados');
+  });
+
+  await checar('senhas erradas em sequência travam a conta', async () => {
+    const email = emailUnico('trava');
+    const cliente = novoCliente();
+    await cliente.req('GET', '/api/config');
+    await cliente.req('POST', '/api/register', {
+      body: { nome: 'Alvo', email, senha: 'senhaforte123' }
+    });
+
+    const errar = () => cliente.req('POST', '/api/login', { body: { email, senha: 'senhaerrada999' } });
+
+    for (let i = 0; i < 3; i += 1) {
+      const r = await errar();
+      afirmar(r.status === 401, `tentativa ${i + 1} respondeu ${r.status}`);
+    }
+
+    // A quarta tentativa cai na trava, mesmo com a senha certa.
+    const travada = await cliente.req('POST', '/api/login', { body: { email, senha: 'senhaforte123' } });
+    afirmar(travada.status === 429, `conta travada respondeu ${travada.status}`);
+    afirmar(travada.dados?.codigo === 'conta_bloqueada', `código inesperado: ${travada.dados?.codigo}`);
+
+    // A senha certa volta a valer assim que a trava expira.
+    await db.users.update({ email }, { $unset: { bloqueadoAte: '', loginFalhas: '' } });
+    const liberada = await cliente.req('POST', '/api/login', { body: { email, senha: 'senhaforte123' } });
+    afirmar(liberada.status === 200, `após destravar respondeu ${liberada.status}`);
+  });
+
   log('\n== Saúde ==');
 
   await checar('health responde com o estado do sistema', async () => {
@@ -1296,6 +1009,8 @@ async function suite() {
     afirmar(r.status === 200, `respondeu ${r.status}`);
     afirmar(dados.ok === true, 'sem ok');
     afirmar(typeof dados.uptime === 'number', 'sem uptime');
+    afirmar(dados.fila === undefined, 'health ainda fala em fila de publicação');
+    afirmar(dados.navegadores === undefined, 'health ainda fala em navegadores abertos');
   });
 
   await checar('rota de API inexistente devolve 404 em JSON', async () => {
@@ -1317,14 +1032,8 @@ async function suite() {
   });
 }
 
-function afirmarPosts(posts, statusEsperado) {
-  for (const post of posts) {
-    afirmarIgual(post.status, statusEsperado, `destino ${post.grupoUrl} ficou com status inesperado`);
-  }
-}
-
 async function main() {
-  log('Postador Pro — testes de fumaça');
+  log('Postador Pro — testes de fumaça da API de licença');
   log(`porta ${PORTA} | dados em ${DATA_DIR}`);
 
   const { problemas } = config.validarConfig();
@@ -1367,4 +1076,3 @@ main().catch(erro => {
   try { fs.rmSync(DATA_DIR, { recursive: true, force: true }); } catch { /* ignora */ }
   process.exit(1);
 });
-

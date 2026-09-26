@@ -6,16 +6,13 @@ const express = require('express');
 const config = require('./config');
 const security = require('./security');
 const http = require('./http');
+const auth = require('./auth');
 const log = require('./log');
-const queue = require('./queue');
-const facebook = require('./facebook');
 
 const rotas = {
   auth: require('./routes/auth'),
-  campaigns: require('./routes/campaigns'),
-  accounts: require('./routes/accounts'),
-  uploads: require('./routes/uploads'),
   billing: require('./routes/billing'),
+  extensao: require('./routes/extensao'),
   admin: require('./routes/admin')
 };
 
@@ -31,23 +28,26 @@ function criarApp() {
   }
 
   app.use(http.cabecalhosSeguranca);
+  app.use(http.corsExtensao);
   app.use(http.parseCookies);
   app.use(express.json({ limit: '1mb' }));
   app.use(http.naoCacheApi);
   app.use(http.loggerHttp);
 
+  // Público: só diz que o serviço está no ar. A extensão usa isto para não
+  // tentar falar com a API antes de ela estar disponível.
   app.get('/api/health', (req, res) => {
     res.json({
       ok: true,
       versao: require('../package.json').version,
       uptime: Math.round(process.uptime()),
-      fila: queue.emAndamento(),
-      navegadores: facebook.listarAbertos().length,
       memoriaMB: Math.round(process.memoryUsage().rss / 1048576)
     });
   });
 
-  app.get('/api/estado', async (req, res) => {
+  // Já exigia `exigirLogin` + `exigirAdmin` abaixo; fica aqui para responder
+  // antes do rate limit geral, sem revelar nada a quem não é administrador.
+  app.get('/api/estado', auth.exigirLogin, auth.exigirAdmin, (req, res) => {
     const { problemas, avisos } = config.validarConfig();
     res.json({ problemas, avisos, pago: Boolean(config.INFINITEPAY_HANDLE) });
   });
@@ -66,14 +66,21 @@ function criarApp() {
   app.use('/api', api);
 
   //-interface
+  // Três telas, e só três. A extensão é o produto; aqui fica o que o cliente
+  // precisa sem a extensão: saber o que é, pagar, recuperar a senha e o
+  // painel do administrador. Nada de menu de campanha que não existe mais.
   const paginas = express.Router();
   paginas.get('/', (req, res) => {
     security.assegurarCsrf(req, res);
     res.sendFile(path.join(config.ROOT_DIR, 'public', 'index.html'));
   });
-  paginas.get('/redefinir', (req, res) => {
+  paginas.get(['/redefinir', '/redefinir-senha'], (req, res) => {
     security.assegurarCsrf(req, res);
-    res.sendFile(path.join(config.ROOT_DIR, 'public', 'index.html'));
+    res.sendFile(path.join(config.ROOT_DIR, 'public', 'redefinir.html'));
+  });
+  paginas.get('/admin', (req, res) => {
+    security.assegurarCsrf(req, res);
+    res.sendFile(path.join(config.ROOT_DIR, 'public', 'admin.html'));
   });
   paginas.get('/termos', (req, res) => res.sendFile(path.join(config.ROOT_DIR, 'public', 'termos.html')));
   paginas.get('/privacidade', (req, res) => res.sendFile(path.join(config.ROOT_DIR, 'public', 'privacidade.html')));
@@ -119,8 +126,15 @@ function segurancaDeOrigem(req, res, next) {
   security.aplicarOrigem(req, res, next);
 }
 
+// A extensão não tem cookie jar: ela não tem como ter o par cookie+header do
+// CSRF, nem precisa dele. As rotas `/extensao/*` autenticam por
+// `Authorization: Bearer`, que o navegador nunca anexa sozinho numa requisição
+// cross-site. Onde o token falta, quem responde é `exigirToken` com 401, e não
+// um 403 de CSRF que não ajuda ninguém a diagnosticar. Continua valendo a
+// allowlist de `segurancaDeOrigem`, o rate limit e o travamento de conta.
 function segurancaDeCsrf(req, res, next) {
   if (req.path.startsWith('/webhooks/')) return next();
+  if (req.path === '/extensao' || req.path.startsWith('/extensao/')) return next();
   security.aplicarCsrf(req, res, next);
 }
 

@@ -1,7 +1,6 @@
 'use strict';
 
 const config = require('./../config');
-const queue = require('./../queue');
 
 function envolver(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -133,28 +132,6 @@ function paginacao(query) {
   return { page, perPage, skip: (page - 1) * perPage };
 }
 
-function resumoCampanha(campanha) {
-  return {
-    id: campanha._id,
-    nome: campanha.nome,
-    conta: campanha.perfilId,
-    accountId: campanha.accountId,
-    destinos: campanha.totalDestinos,
-    listaDestinos: campanha.destinos || [],
-    dataExecucao: campanha.dataExecucao,
-    status: campanha.status,
-    concluidos: campanha.concluidos || 0,
-    falhas: campanha.falhas || 0,
-    imagens: campanha.imagens || [],
-    nImagens: (campanha.imagens || []).length,
-    textos: campanha.textos || []
-  };
-}
-
-function isAtiva(status) {
-  return [queue.STATUS.PENDENTE, queue.STATUS.PROCESSANDO].includes(status);
-}
-
 module.exports = {
   envolver,
   naoEncontrado,
@@ -167,7 +144,5 @@ module.exports = {
   normalizarDestinos,
   mensagemDestinosInvalidos,
   parseData,
-  paginacao,
-  resumoCampanha,
-  isAtiva
+  paginacao
 };

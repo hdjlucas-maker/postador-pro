@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Administração — Postador Pro</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/estilo.css">
+</head>
+<body>
+
+<header class="tarja">
+  <div class="centralizado">
+    <a class="marca" href="/"><span class="logo">P</span> Postador Pro</a>
+    <nav>
+      <span id="identidade" style="color:var(--texto-suave);font-size:14px"></span>
+      <button class="botao secundario" type="button" id="sair" hidden>Sair</button>
+    </nav>
+  </div>
+</header>
+
+<main class="principal">
+  <div class="centralizado">
+
+    <form class="formulario" id="form-login">
+      <h1>Administração</h1>
+      <p>Área restrita. Entre com a conta de administrador.</p>
+
+      <div class="mensagem" id="aviso-login"></div>
+
+      <div class="campo">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" required maxlength="254" autocomplete="username">
+      </div>
+
+      <div class="campo">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" required maxlength="200" autocomplete="current-password">
+      </div>
+
+      <button class="botao largo" type="submit" id="entrar">Entrar</button>
+    </form>
+
+    <div id="conteudo" hidden>
+
+      <div class="aviso" id="alertas" style="display:none;margin-bottom:20px"></div>
+
+      <section class="grade grade-3" id="metricas" style="margin-bottom:20px"></section>
+
+      <div class="painel">
+        <header>
+          <h2>Usuários</h2>
+          <div class="acoes">
+            <input id="busca" placeholder="Buscar por e-mail" style="border:1px solid var(--borda);border-radius:var(--raio);padding:7px 10px;font:inherit">
+            <button class="botao secundario" type="button" id="atualizar">Atualizar</button>
+          </div>
+        </header>
+        <div class="rolagem">
+          <table>
+            <thead>
+              <tr>
+                <th>E-mail</th><th>Nome</th><th>Plano</th><th>Expira</th><th>Cadastro</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="linhas-usuarios"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="painel">
+        <header>
+          <h2>Pagamentos</h2>
+          <div class="acoes">
+            <button class="botao secundario" type="button" id="recarregar-pagamentos">Atualizar</button>
+          </div>
+        </header>
+        <div class="rolagem">
+          <table>
+            <thead>
+              <tr>
+                <th>Pedido</th><th>Plano</th><th>Valor</th><th>Status</th><th>Criado</th>
+              </tr>
+            </thead>
+            <tbody id="linhas-pagamentos"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</main>
+
+<footer class="rodape">
+  <div class="centralizado">
+    <span><a class="link-suave" href="/">Voltar ao site</a></span>
+  </div>
+</footer>
+
+<script src="/assets/comum.js"></script>
+<script src="/assets/admin.js"></script>
+</body>
+</html>

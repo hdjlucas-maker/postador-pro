@@ -6,7 +6,9 @@ const Datastore = require('nedb-promises');
 const config = require('./config');
 const log = require('./log');
 
-const COLECOES = ['users', 'sessions', 'accounts', 'campaigns', 'posts', 'payments', 'resets', 'uploads'];
+// Coleções da API de licença. Campanha, publicação, conta conectada e upload
+// não existem aqui: esses dados vivem no navegador do cliente.
+const COLECOES = ['users', 'sessions', 'payments', 'resets'];
 
 const db = {};
 
@@ -27,20 +29,10 @@ async function iniciar() {
     db.sessions.ensureIndex({ fieldName: 'tokenHash' }),
     db.sessions.ensureIndex({ fieldName: 'userId' }),
     db.sessions.ensureIndex({ fieldName: 'expiresAt' }),
-    db.accounts.ensureIndex({ fieldName: 'userId' }),
-    db.campaigns.ensureIndex({ fieldName: 'userId' }),
-    db.campaigns.ensureIndex({ fieldName: 'userId', fieldName2: 'status' }),
-    db.posts.ensureIndex({ fieldName: 'userId' }),
-    db.posts.ensureIndex({ fieldName: 'campanhaId' }),
-    db.posts.ensureIndex({ fieldName: 'userId', fieldName2: 'status' }),
-    db.posts.ensureIndex({ fieldName: 'userId', fieldName2: 'accountId' }),
-    db.posts.ensureIndex({ fieldName: 'status', fieldName2: 'dataExecucao' }),
     db.payments.ensureIndex({ fieldName: 'order_nsu', unique: true }),
     db.payments.ensureIndex({ fieldName: 'userId' }),
     db.resets.ensureIndex({ fieldName: 'tokenHash' }),
-    db.resets.ensureIndex({ fieldName: 'expiraEm' }),
-    db.uploads.ensureIndex({ fieldName: 'userId' }),
-    db.uploads.ensureIndex({ fieldName: 'userId', fieldName2: 'campaignIds' })
+    db.resets.ensureIndex({ fieldName: 'expiraEm' })
   ]);
 
   log.info('db_pronta', { dir: config.DATA_DIR, colecoes: COLECOES });

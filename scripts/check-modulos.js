@@ -5,6 +5,10 @@
  * src/ precisa existir no objeto exportado pelo módulo. Erros de digitação em
  * nomes de exportação não quebram a sintaxe e só aparecem em tempo de
  * execução — este script os encontra antes do deploy.
+ *
+ * A segunda metade confere as chamadas a funções do próprio arquivo
+ * (`algumaCoisa(...)`), que têm o mesmo problema: `addMinutos` no lugar de
+ * `addMinutes` compila e só explode quando a linha é alcançada.
  */
 
 const fs = require('fs');
@@ -28,6 +32,25 @@ const NATIVOS = new Set([
   'keys', 'values', 'entries', 'has', 'get', 'set', 'then', 'catch', 'stringify',
   'parse', 'assign', 'freeze', 'toString', 'valueOf', 'startsWith', 'endsWith',
   'match', 'matchAll', 'test', 'exec', 'flat', 'from', 'of', 'getTime'
+]);
+
+// Globais disponíveis em Node e nos módulos do projeto.
+const GLOBAIS = new Set([
+  'require', 'module', 'exports', 'process', 'console', 'Buffer', 'setTimeout',
+  'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'queueMicrotask',
+  'fetch', 'URL', 'URLSearchParams', 'AbortController', 'AbortSignal', 'TextEncoder',
+  'TextDecoder', 'crypto', 'performance', 'structuredClone', 'JSON', 'Math', 'Date',
+  'Object', 'Array', 'String', 'Number', 'Boolean', 'Promise', 'Map', 'Set', 'Symbol',
+  'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'RegExp',
+  'Intl', 'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURIComponent',
+  'decodeURIComponent', 'encodeURI', 'decodeURI', 'undefined', 'NaN', 'Infinity',
+  'globalThis', '__dirname', '__filename', 'Proxy', 'Reflect', 'WeakMap', 'WeakSet'
+]);
+
+// Palavras que precedem `(` sem serem chamadas.
+const NAO_CHAMADA = new Set([
+  'if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'typeof',
+  'new', 'await', 'do', 'else', 'async', 'constructor'
 ]);
 
 const arquivos = [];
@@ -55,8 +78,63 @@ function resolver(base) {
   return null;
 }
 
+/**
+ * Substitui comentários e strings por espaços, mantendo o tamanho do texto para
+ * os números de linha continuarem certos. Sem isso, uma frase em comentário
+ * como "o nome() da função" vira falso positivo.
+ */
+function limpar(texto) {
+  let saida = '';
+  let i = 0;
+
+  while (i < texto.length) {
+    const dois = texto.slice(i, i + 2);
+
+    if (dois === '//') {
+      const quebra = texto.indexOf('\n', i);
+      const ate = quebra === -1 ? texto.length : quebra;
+      saida += ' '.repeat(ate - i);
+      i = ate;
+      continue;
+    }
+
+    if (dois === '/*') {
+      const fecha = texto.indexOf('*/', i + 2);
+      const ate = fecha === -1 ? texto.length : fecha + 2;
+      saida += texto.slice(i, ate).replace(/[^\n]/g, ' ');
+      i = ate;
+      continue;
+    }
+
+    const aspas = texto[i];
+    if (aspas === "'" || aspas === '"' || aspas === '`') {
+      let j = i + 1;
+      while (j < texto.length) {
+        if (texto[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (texto[j] === aspas) {
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      saida += ' '.repeat(j - i);
+      i = j;
+      continue;
+    }
+
+    saida += aspas;
+    i += 1;
+  }
+
+  return saida;
+}
+
 const problemas = [];
 
+/* --- 1. Propriedades de módulos internos --- */
 for (const arquivo of arquivos) {
   const texto = fs.readFileSync(arquivo, 'utf8');
   const relativo = path.relative(RAIZ, arquivo);
@@ -93,6 +171,61 @@ for (const arquivo of arquivos) {
         detalhe: `${alias}.${propriedade} não existe no módulo ${path.basename(destino)}`
       });
     }
+  }
+}
+
+/* --- 2. Funções chamadas e não definidas no próprio arquivo --- */
+for (const arquivo of arquivos) {
+  const texto = limpar(fs.readFileSync(arquivo, 'utf8'));
+  const relativo = path.relative(RAIZ, arquivo);
+
+  // Tudo que este arquivo declara: funções, variáveis, parâmetros e métodos.
+  const disponiveis = new Set(GLOBAIS);
+
+  for (const d of texto.matchAll(/(?:^|\s)(?:async\s+)?function\s*\*?\s*([A-Za-z_$][A-Za-z0-9_$]*)/g)) {
+    disponiveis.add(d[1]);
+  }
+  for (const d of texto.matchAll(/(?:^|[\s;{,(])(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g)) {
+    disponiveis.add(d[1]);
+  }
+  for (const d of texto.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
+    for (const parte of d[1].split(',')) {
+      const nome = parte.split(':').pop().split('=')[0].trim();
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(nome)) disponiveis.add(nome);
+    }
+  }
+  for (const d of texto.matchAll(/\(([^()]*)\)\s*(?:=>|\{)/g)) {
+    for (const parte of d[1].split(',')) {
+      const nome = parte.split('=')[0].replace(/[.\[\]]/g, '').trim();
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(nome)) disponiveis.add(nome);
+    }
+  }
+  // Parâmetros desestruturados: `criarRateLimit({ nome, chave = fn })`.
+  for (const d of texto.matchAll(/\(\s*\{([^}]*)\}/g)) {
+    for (const parte of d[1].split(',')) {
+      const nome = parte.split(':').pop().split('=')[0].replace(/[.\[\]]/g, '').trim();
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(nome)) disponiveis.add(nome);
+    }
+  }
+  for (const d of texto.matchAll(/\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*\{/g)) {
+    disponiveis.add(d[1]);
+  }
+  for (const d of texto.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)/g)) {
+    disponiveis.add(d[1]);
+  }
+
+  for (const c of texto.matchAll(/(^|[^.\w$])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g)) {
+    const nome = c[2];
+    if (c[1] === '.') continue;
+    if (NAO_CHAMADA.has(nome)) continue;
+    if (disponiveis.has(nome)) continue;
+    if (/function\s*$/.test(texto.slice(Math.max(0, c.index - 16), c.index + 1))) continue;
+
+    problemas.push({
+      arquivo: relativo,
+      linha: texto.slice(0, c.index).split(/\r?\n/).length,
+      detalhe: `${nome}() é chamada mas não está definida neste arquivo nem é global`
+    });
   }
 }
 

@@ -190,22 +190,20 @@ function registrar(router) {
     })
   );
 
-  // LGPD: portability
+  // LGPD: portability. O servidor só tem o que é da conta e do pagamento:
+  // campanha, publicação e imagem vivem no navegador do cliente, e o cliente
+  // as exporta de lá.
   router.get(
     '/me/dados',
     auth.exigirLogin,
     envolver(async (req, res) => {
       const userId = req.user._id;
-      const [contas, campanhas, publicacoes, pagamentos] = await Promise.all([
-        db.accounts.find({ userId }),
-        db.campaigns.find({ userId }),
-        db.posts.find({ userId }),
-        db.payments.find({ userId })
-      ]);
+      const pagamentos = await db.payments.find({ userId });
 
       res.setHeader('Content-Disposition', `attachment; filename="postador-dados-${userId}.json"`);
       res.json({
         geradoEm: new Date().toISOString(),
+        observacao: 'Campanhas, publicações e imagens ficam somente no navegador do cliente e não são enviadas ao servidor.',
         conta: {
           id: req.user._id,
           nome: req.user.nome,
@@ -216,9 +214,6 @@ function registrar(router) {
           plano: req.user.plano,
           dataExpiracao: req.user.dataExpiracao
         },
-        contasFacebook: contas,
-        campanhas,
-        publicacoes,
         pagamentos
       });
     })
@@ -239,34 +234,7 @@ function registrar(router) {
       }
 
       const userId = req.user._id;
-      const contas = await db.accounts.find({ userId });
-      const ativas = await db.campaigns.count({ userId, status: { $in: ['pendente', 'processando'] } });
 
-      if (ativas > 0) {
-        throw Object.assign(
-          new Error(`Você tem ${ativas} campanha(s) ativa(s). Cancele ou conclua antes de excluir a conta.`),
-          { status: 400 }
-        );
-      }
-
-      const fs = require('fs');
-      for (const conta of contas) {
-        await require('./../facebook').fecharNavegadorFacebook(conta._id, userId);
-        fs.rmSync(require('./../facebook').profileDir(userId, conta._id), { recursive: true, force: true });
-      }
-
-      const campanhas = await db.campaigns.find({ userId });
-      const imagens = new Set();
-      for (const campanha of campanhas) {
-        for (const imagem of campanha.imagens || []) imagens.add(imagem);
-      }
-      for (const imagem of imagens) {
-        fs.rmSync(imagem, { force: true });
-      }
-
-      await db.posts.remove({ userId }, { multi: true });
-      await db.campaigns.remove({ userId }, { multi: true });
-      await db.accounts.remove({ userId }, { multi: true });
       await db.payments.remove({ userId }, { multi: true });
       await db.sessions.remove({ userId }, { multi: true });
       await db.resets.remove({ userId }, { multi: true });
@@ -274,7 +242,10 @@ function registrar(router) {
 
       auth.encerrarSessao(res);
       log.info('conta_excluida', { userId });
-      res.json({ ok: true, mensagem: 'Conta e dados excluídos.' });
+      res.json({
+        ok: true,
+        mensagem: 'Conta e dados do servidor excluídos. Os dados que estavam no navegador precisam ser apagados pela extensão.'
+      });
     })
   );
 }

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redefinir senha — Postador Pro</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/estilo.css">
+</head>
+<body>
+
+<header class="tarja">
+  <div class="centralizado">
+    <a class="marca" href="/"><span class="logo">P</span> Postador Pro</a>
+  </div>
+</header>
+
+<main>
+  <form class="formulario" id="form-pedido" autocomplete="on">
+    <h1>Esqueci minha senha</h1>
+    <p>Informe o e-mail da sua conta. Enviamos um link com o código para criar uma nova senha.</p>
+
+    <div class="mensagem" id="aviso"></div>
+
+    <div class="campo">
+      <label for="email">E-mail da conta</label>
+      <input type="email" id="email" name="email" required maxlength="254" autocomplete="email" placeholder="voce@exemplo.com">
+    </div>
+
+    <button class="botao largo" type="submit" id="enviar">Enviar link</button>
+  </form>
+
+  <form class="formulario" id="form-nova" autocomplete="off" hidden>
+    <h1>Criar nova senha</h1>
+    <p>Digite o código que chegou por e-mail e escolha uma senha nova.</p>
+
+    <div class="mensagem" id="aviso-nova"></div>
+
+    <div class="campo">
+      <label for="token">Código do e-mail</label>
+      <input type="text" id="token" name="token" required maxlength="200" autocomplete="one-time-code" placeholder="Cole o código aqui">
+    </div>
+
+    <div class="campo">
+      <label for="senha">Senha nova</label>
+      <input type="password" id="senha" name="senha" required minlength="8" maxlength="200" autocomplete="new-password">
+    </div>
+
+    <div class="campo">
+      <label for="confirmar">Repita a senha</label>
+      <input type="password" id="confirmar" name="confirmar" required minlength="8" maxlength="200" autocomplete="new-password">
+    </div>
+
+    <button class="botao largo" type="submit" id="salvar">Salvar nova senha</button>
+  </form>
+</main>
+
+<footer class="rodape">
+  <div class="centralizado">
+    <span>Lembrou? <a class="link-suave" href="/">Voltar ao início</a></span>
+  </div>
+</footer>
+
+<script src="/assets/comum.js"></script>
+<script src="/assets/redefinir.js"></script>
+</body>
+</html>

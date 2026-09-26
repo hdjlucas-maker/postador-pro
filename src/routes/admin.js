@@ -1,12 +1,9 @@
 'use strict';
 
-const fs = require('fs');
 const config = require('./../config');
 const { db, backup } = require('./../db');
 const auth = require('./../auth');
 const billing = require('./../billing');
-const queue = require('./../queue');
-const facebook = require('./../facebook');
 const log = require('./../log');
 const { envolver, naoEncontrado, paginacao } = require('./helpers');
 
@@ -33,11 +30,8 @@ function registrar(router) {
     auth.exigirLogin,
     auth.exigirAdmin,
     envolver(async (req, res) => {
-      const [users, campaigns, posts, accounts, payments, pendentes] = await Promise.all([
+      const [users, payments, pendentes] = await Promise.all([
         db.users.find({}),
-        db.campaigns.find({}),
-        db.posts.find({}),
-        db.accounts.find({}),
         db.payments.find({}).sort({ criadoEm: -1 }).limit(20),
         db.payments.count({ status: { $ne: 'paid' } })
       ]);
@@ -57,23 +51,8 @@ function registrar(router) {
           trial: users.filter(u => (u.plano || 'trial') === 'trial').length,
           bloqueados: users.filter(u => u.bloqueado).length
         },
-        campanhas: {
-          total: campaigns.length,
-          ativas: campaigns.filter(c => [queue.STATUS.PENDENTE, queue.STATUS.PROCESSANDO].includes(c.status)).length
-        },
-        publicacoes: {
-          total: posts.length,
-          concluidas: posts.filter(p => p.status === queue.STATUS.CONCLUIDO).length,
-          falhas: posts.filter(p => p.status === queue.STATUS.FALHOU).length,
-          interrompidas: posts.filter(p => p.status === queue.STATUS.INTERROMPIDO).length,
-          pendentes: posts.filter(p => [queue.STATUS.PENDENTE, queue.STATUS.PROCESSANDO].includes(p.status)).length
-        },
-        contasFacebook: { total: accounts.length, conectadas: accounts.filter(a => a.conectada).length },
         pagamentos: { total: payments.length, pendentes },
         sistema: {
-          filaEmExecucao: queue.emAndamento(),
-          navegadoresAbertos: facebook.listarAbertos().length,
-          limiteNavegadores: config.MAX_NAVEGADORES_CONCORRENTES,
           smtp: config.SMTP_ENABLED,
           pagamento: Boolean(config.INFINITEPAY_HANDLE)
         },
@@ -104,12 +83,8 @@ function registrar(router) {
 
       const contagens = await Promise.all(
         users.map(async user => {
-          const [campanhas, contas] = await Promise.all([
-            db.campaigns.count({ userId: user._id }),
-            db.accounts.count({ userId: user._id })
-          ]);
           const estado = await auth.estadoDeAcesso(user);
-          return { ...resumo(user, estado.status), campanhas, contas };
+          return resumo(user, estado.status);
         })
       );
 
@@ -229,15 +204,6 @@ function registrar(router) {
         throw Object.assign(new Error('Você não pode excluir a própria conta pelo painel.'), { status: 400 });
       }
 
-      const contas = await db.accounts.find({ userId: user._id });
-      for (const conta of contas) {
-        await facebook.fecharNavegadorFacebook(conta._id, user._id);
-        fs.rmSync(facebook.profileDir(user._id, conta._id), { recursive: true, force: true });
-      }
-
-      await db.posts.remove({ userId: user._id }, { multi: true });
-      await db.campaigns.remove({ userId: user._id }, { multi: true });
-      await db.accounts.remove({ userId: user._id }, { multi: true });
       await db.payments.remove({ userId: user._id }, { multi: true });
       await db.sessions.remove({ userId: user._id }, { multi: true });
       await db.resets.remove({ userId: user._id }, { multi: true });

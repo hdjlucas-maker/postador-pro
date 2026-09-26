@@ -10,7 +10,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const RAIZ = path.resolve(__dirname, '..');
-const IGNORAR = new Set(['node_modules', '.git', 'data', 'uploads', 'facebook-profiles', '.backup']);
+const IGNORAR = new Set(['node_modules', '.git', 'data', '.backup']);
 const EXTENSOES = new Set(['.js', '.cjs', '.mjs']);
 
 const arquivos = [];

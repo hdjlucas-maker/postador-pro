@@ -1,189 +1,149 @@
 # Postador Pro
 
-Ferramenta de publicação em grupos do Facebook, com login manual por perfil
-isolado do navegador, fila de execução, cobrança via InfinitePay e painel
-administrativo. Multi-tenant: cada conta tem seus próprios perfis, campanhas,
-uploads e histórico, e só enxerga os próprios dados.
+Extensão de navegador para divulgar produtos em grupos do Facebook, com
+assinatura mensal ou anual e cobrança pela InfinitePay.
 
-## Como funciona
+O usuário instala a extensão, fica com a **conta do Facebook dele mesmo** já
+logada no navegador dele, cria campanhas com texto, imagem, lista de grupos e
+horário, e a extensão publica. A senha do Facebook nunca entra no produto.
 
-O usuário conecta uma conta do Facebook, cria uma campanha com texto, imagens,
-destinos e horário, e o servidor executa a publicação mais tarde, no perfil
-navegador que ele mesmo conectou. O aplicativo nunca recebe a senha do
-Facebook: o login acontece na janela do Chromium.
+## Como está dividido
+
+**A extensão** (na máquina do cliente) faz toda a publicação. Campanhas, textos,
+imagens, destino, horário, histórico, delay e agendamento vivem no navegador do
+cliente. Ela publica na aba em que o próprio usuário está logado, com delay
+aleatório entre um destino e outro, para não derrubar a conta.
+
+**A API de licença** (o servidor) tem quatro funções: autenticar o usuário, dizer
+se a assinatura está ativa e até quando, receber o webhook da InfinitePay para
+liberar ou renovar, e servir o download da extensão. Ela não publica nada.
+
+O webhook da InfinitePay só é chamado por HTTPS público, e extensão não tem URL.
+Por isso existe servidor. O que ele não tem é navegador, display virtual nem
+memória: uma VPS de 1 GB roda a API de licença com folga.
+
+Agendamento depende do navegador aberto. No Manifest V3 o Chrome encerra o
+service worker após inatividade e o `chrome.alarms` só dispara com o navegador
+ligado. Isso está escrito na interface e nos termos de uso.
 
 ## Estrutura
 
 ```
-server.js              boot: HTTP, fila, agendamentos, shutdown
+extensao/                  a extensão (em construção)
+  manifest.json            Manifest V3
+  background/              service worker: alarmas, fila, orquestração
+  content/                 DOM do Facebook: digita, anexa, publica
+  popup/ options/          interface
+  lib/                     armazenamento local, licença, imagens
+
+server.js                  boot da API de licença
 src/
-  app.js               middlewares e criação do Express
-  http.js              cookies, cabeçalhos de segurança, CSP
-  config.js            leitura do .env, planos, limites, validação
-  db.js                NeDB, índices, compactação, backup
-  auth.js              sessões, senha, tokens de redefinição
-  security.js          CSRF, origem, rate limit, sanitização
-  log.js               log JSON estruturado
-  cron-agenda.js       intervalo em minutos -> expressão cron válida
-  queue.js             agrupamento, concorrência, retentativas
-  facebook.js          perfis isolados e ciclo de vida dos navegadores
-  executor.js          digitação, rolagem e publicação no Facebook
-  billing.js           checkout, webhook, idempotência
-  routes/              auth, campanhas, contas, cobrança, admin, páginas
-public/                interface, termos e privacidade
-data/                  bancos, perfis, uploads e backups (nunca versionado)
-tests/smoke.test.js    suíte de fumaça
-scripts/               verificações de sintaxe e de chamadas entre módulos
+  app.js                   middlewares, rotas e criação do Express
+  http.js                  cookies, cabeçalhos, CSP, CORS e CORP
+  config.js                .env, planos, limites, allowlist, validação de boot
+  db.js                    NeDB, índices, compactação, backup
+  auth.js                  sessões, token da extensão, hash, trava de conta
+  security.js              CSRF, origem, rate limit, allowlist de extensão
+  email.js                 SMTP: recuperação de senha
+  log.js                   log JSON estruturado
+  billing.js               checkout, webhook, idempotência
+  routes/
+    auth.js                cadastro, login, sessão, recuperação, exclusão
+    billing.js             checkout, assinatura e webhook
+    extensao.js            login por token, licença, checkout, reconciliação
+    admin.js               rotas administrativas
+    helpers.js             utilitários de rota
+public/
+  index.html               página de instalação e planos
+  redefinir.html           recuperação de senha
+  admin.html               painel administrativo
+  termos.html              termos de uso e responsabilidade
+  privacidade.html         política de dados
+  assets/                  estilo e script das três telas
+data/                      bancos e backups (nunca versionado)
+tests/smoke.test.js        suíte de fumaça da API de licença
+scripts/
+  check-syntax.js          sintaxe de todos os .js
+  check-modulos.js         chamadas entre módulos e funções do próprio arquivo
+  preflight.js             o que impede a subida em produção
+  backup.js                criar, listar e restaurar backup
+  testar-backup.js         prova de que o backup volta
 ```
+
+## Como a extensão fala com o servidor
+
+A extensão não tem cookie jar, e cookie `SameSite` não atravessa a fronteira
+`chrome-extension://`. Autenticação por sessão, portanto, não funcionaria. O
+caminho é token:
+
+```
+POST /api/extensao/login        { email, senha }  ->  { token, licenca }
+GET  /api/extensao/licenca      Authorization: Bearer <token>
+POST /api/extensao/checkout     Authorization: Bearer <token>
+POST /api/extensao/reconciliar  Authorization: Bearer <token>
+GET  /api/extensao/planos       público: preços e limites
+```
+
+O token fica guardado no servidor apenas como SHA-256 e vale
+`TOKEN_EXTENSAO_DIAS` dias. O navegador nunca anexa `Authorization` sozinho numa
+requisição de outro site, então as rotas `/extensao/*` dispensam CSRF: onde o
+token falta, quem responde é 401.
+
+Dois ajustes que a extensão exige e a API precisava:
+
+- `EXTENSAO_IDS` lista os IDs liberados. Só `chrome-extension://<ID>` da lista
+  passa na verificação de origem e só eles recebem cabeçalho de CORS.
+- `Cross-Origin-Resource-Policy` é `cross-origin` em `/api/` e `same-origin` no
+  HTML. Com `same-origin` em todo lugar, o navegador descartaria a resposta
+  antes de a extensão conseguir ler.
+
+O ID da extensão só existe depois que o `extensao/manifest.json` tiver uma
+`key` fixa. Pegue em `chrome://extensions`, na página da extensão, campo "ID".
 
 ## Instalação local
 
 ```bash
 npm install
 cp .env.example .env
+npm run lint
+npm test
 npm start
 ```
 
-Acesse `http://localhost:3000`. Rode `npm start` sem `INFINITEPAY_HANDLE` para
-trabalhar com o checkout desativado; o resto do app funciona normalmente.
-
-O Chromium do puppeteer é baixado automaticamente. Se faltar:
-
-```bash
-npx puppeteer browsers install chrome
-```
+O servidor sobe em `http://localhost:3000`.
 
 ## Verificação
 
 ```bash
-npm run lint   # sintaxe de todos os arquivos + chamadas entre módulos
-npm test       # suíte de fumaça
-npm run preflight  # o que impede a subida em produção
+npm run lint   # sintaxe de todos os .js e nomes chamados
+npm test       # 60 verificações da API de licença
+npm run preflight
+npm run backup -- listar
+npm run verificar:backup
 ```
 
-A suíte sobe o app no próprio processo, com diretório de dados temporário, e
-cobre autenticação, isolamento entre usuários, limites de plano, CSRF, origem,
-exposição de arquivos, upload, fila, cobrança e admin.
+O `preflight` sai com código 1 quando algo impede o serviço: disco cheio, pasta
+sem escrita, SMTP ausente em produção, URL sem HTTPS. É o filtro entre "rodei o
+deploy" e "descobri com cliente esperando que nada funciona".
 
-`npm run preflight` confere o que só quebra em produção: navegador presente,
-espaço em disco, permissão de escrita, display virtual (Xvfb) e a configuração
-do `.env`. Ele sai com código 1 se algo impedir a publicação. Use antes de
-`deploy-vps.sh` e de `update.sh` — os dois já chamam o preflight.
-
-Depois de subir, confira a instância de fora:
-
-```bash
-node scripts/smoke-online.js https://seu-dominio
-```
-
-São 28 verificações: HTTPS, cabeçalhos de segurança, arquivos privados
-(`.env`, `data/`, `*.db`, código-fonte), API, bloqueio de CSRF e páginas
-públicas. Resposta `28/28` significa que dá para mostrar o link ao cliente.
-
-## Backup
-
-```bash
-npm run backup -- listar                    # backups disponíveis
-npm run backup -- criar                     # gera um agora
-npm run backup -- restaurar backup-2026-... # restaura (pare o app antes)
-```
-
-O backup automático roda a cada `BACKUP_MINUTOS` (padrão: 6 horas), apenas com
-`NODE_ENV=production`, e mantém as `BACKUPS_MAXIMOS` cópias mais recentes (30).
-Os backups ficam em `data/backups`, **na mesma máquina**: copie para fora, senão
-perder o disco é perder tudo.
-
-> **Antes de publicar o produto, leia [`DIRETRIZES.md`](DIRETRIZES.md).**
-> Ele registra as regras inegociáveis, a arquitetura atual, as correções já
-> feitas e o plano por etapas para ir ao ar.
->
-> Para colocar no ar: [`GUIA-PUBLICACAO.md`](GUIA-PUBLICACAO.md) tem o passo a
-> passo de domínio, VPS, túnel, SMTP e InfinitePay.
-
-## Configuração
-
-Todas as variáveis estão documentadas e comentadas em `.env.example`. As que
-mais costumam ser esquecidas:
-
-| Variável | Por quê importa |
-|---|---|
-| `PUBLIC_BASE_URL` | Endereço usado no link de redefinição e na validação de origem. Precisa ser HTTPS em produção. |
-| `TRUST_PROXY` | Quantos proxies vêm antes do Node. Sem isso o rate limit enxerga o IP do proxy e o cookie Secure sai errado. |
-| `SMTP_*` | Sem SMTP o app **não sobe** em produção: o cliente não conseguiria recuperar a senha. |
-| `ADMIN_EMAILS` | Sem isso ninguém entra em `/admin`. |
-| `INFINITEPAY_HANDLE` | Sem isso o checkout responde que o pagamento está indisponível. |
-| `DATA_DIR` | Banco, perfis e uploads. Faça backup deste diretório. |
-| `MAX_NAVEGADORES_CONCORRENTES` | Cada navegador é um Chromium headful. Dimensione pela RAM da máquina. |
-
-O servidor valida a configuração no boot: um problema (como SMTP ausente em
-produção) impede a inicialização em vez de falhar mais tarde, no meio de uma
-publicação.
-
-## Planos
-
-| Recurso | Avaliação (trial) | Assinante (pro) |
-|---|---|---|
-| Contas Facebook | 1 | 10 |
-| Campanhas ativas | 3 | 200 |
-| Destinos por campanha | 20 | 100 |
-
-Todo cadastro começa com 7 dias de avaliação, guardados no banco da conta.
-Preços e limites são ajustáveis por ambiente (`PLAN_*_PRICE`, `LIMIT_*`).
-
-## Cobrança (InfinitePay)
-
-O checkout é criado em `https://api.checkout.infinitepay.io/links` e a
-confirmação chega em `POST /api/webhooks/infinitepay`.
-
-A aplicação do pagamento é idempotente: o registro é reivindicado com uma
-escrita condicional, de modo que dois webhooks simultâneos não concedem a
-mesma compra duas vezes. Renovações acumulam sobre a data atual.
-
-## Publicação
-
-As publicações de uma mesma conta são agrupadas e executadas na mesma sessão
-do navegador, com cadência de digitação variável, rolagem antes de escrever e
-espera aleatória entre postagens. A fila reprocessa o que falhou até
-`MAX_TENTATIVAS` e, ao reiniciar o servidor, retoma o que ficou pendente.
-
-Erros permanentes (sessão expirada, perfil sem acesso, elemento não
-encontrado) não são repetidos: repetir não resolve. Erros de infraestrutura
-entram em retentativa com espera crescente.
-
-O Chromium é aberto em modo headful. Em servidor Linux sem monitor, é
-obrigatório um display virtual (Xvfb) — o `deploy-vps.sh` instala e habilita o
-Xvfb como serviço.
-
-## Produção
+## Deploy
 
 ```bash
 bash deploy-vps.sh <dominio> <email_admin> <infinitepay_handle>
+bash update.sh    # em atualizações, na VPS
 ```
 
-O script instala Node, as bibliotecas do Chromium, PM2, cloudflared e o Xvfb;
-depois exige que o SMTP seja preenchido no `.env` antes de o app conseguir
-subir. Para atualizar uma instalação existente, use `bash update.sh`, que faz
-backup antes do `git pull` e valida a configuração antes de reiniciar.
+`update.sh` faz backup antes do `git pull` e não reinicia se a configuração
+estiver inválida.
 
-Pontos que importam em produção:
+## O que o servidor guarda
 
-1. **HTTPS é obrigatório.** Com `PUBLIC_BASE_URL` em http o cookie de sessão
-   não sai com `Secure`, e o link de redefinião chega errado ao cliente.
-2. **`instances: 1` no PM2 é obrigatório.** A fila e a reserva de cobrança
-   idempotente vivem na memória do processo. Duas instâncias poderiam
-   publicar a mesma campanha em paralelo e liberar a mesma compra duas vezes.
-3. **Nunca versionar `data/`.** Contém sessões, e-mails, hashes de senha e os
-   perfis do navegador. O backup automático grava em `data/backups`; copie
-   esse diretório para fora da máquina.
-4. **O backup só roda com `NODE_ENV=production`**, na cadência de
-   `BACKUP_MINUTOS`. O log de boot mostra a expressão gerada, no campo
-   `agendamentos`.
-5. Logs são JSON estruturados. Os eventos úteis: `http`, `servidor_iniciado`,
-   `agendamentos`, `publicacao_sucesso`, `publicacao_falha`, `infinitepay_*`.
+Só a conta do cliente: e-mail, nome, hash da senha, plano, vencimento e histórico
+de pagamento. Campanha, publicação, imagem e destino **não vão para o servidor**:
+ficam no navegador do cliente, e o cliente os exporta e apaga de lá.
 
-## Privacidade e termos
+## Licença
 
-`public/termos.html` e `public/privacidade.html` são rascunhos. A ferramenta
-automatiza o navegador do próprio usuário e publica em grupos do Facebook: os
-dois textos precisam ser revisados por um advogado antes da venda, e o
-operador precisa conferir as regras da Meta para os destinos usados.
+`instances: 1` no PM2. A reserva de cobrança idempotente depende de um processo
+só: com duas instâncias, dois webhooks simultâneos poderiam liberar a mesma
+compra duas vezes.

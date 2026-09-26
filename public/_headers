@@ -1,0 +1,40 @@
+# Cabeçalhos de segurança dos arquivos estáticos.
+#
+# A interface é servida direto do edge pelo binding de assets, sem passar pelo
+# Worker. Por isso o CSP mora aqui e não no middleware: é o jeito de a resposta
+# sair com os cabeçalhos certos sem gastar uma invocação do Worker em cada
+# visita — o que no plano gratuito (100 mil requisições por dia) seria caro.
+#
+# A API em `/api/*` NÃO é servida por aqui: quem responde é o Worker, que
+# precisa de `Cross-Origin-Resource-Policy: cross-origin` para a extensão ler a
+# resposta. Aqui o HTML leva `same-origin`, que é o que fecha a página contra
+# leitura por outra origem.
+
+/*
+  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'; upgrade-insecure-requests
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Páginas com dados de conta nunca podem ficar em cache intermediário.
+/index.html
+  Cache-Control: no-store
+  Cross-Origin-Resource-Policy: same-origin
+
+/redefinir.html
+  Cache-Control: no-store
+  Cross-Origin-Resource-Policy: same-origin
+
+/admin.html
+  Cache-Control: no-store
+  Cross-Origin-Resource-Policy: same-origin
+
+/termos.html
+  Cache-Control: public, max-age=3600
+
+/privacidade.html
+  Cache-Control: public, max-age=3600

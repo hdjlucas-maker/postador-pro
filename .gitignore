@@ -1,25 +1,21 @@
 # Dependências
 node_modules/
 
+# Estado local do Wrangler: banco D1 de desenvolvimento, cache e blobs.
+# É o mesmo que o `.env`: máquina local, nunca versionado.
+.wrangler/
+
 # Segredos e configuração local
 .env
 .env.local
 .env.*.local
 
-# Dados do servidor: banco, perfis do Facebook, uploads e backups.
+# Dados do servidor: banco e backups.
 # NADA aqui pode ser versionado — contém sessões, e-mails e senhas (hash).
 data/
 *.db
 *.db~
 *.db.lock
-sessions.db
-users.db
-payments.db
-posts.db
-campaigns.db
-facebook-accounts.db
-facebook-profiles/
-uploads/
 backups/
 
 # Logs

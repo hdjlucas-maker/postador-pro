@@ -31,15 +31,17 @@ const PLANS = {
   annual: { id: 'annual', name: 'Postador Pro Anual', price: num(process.env.PLAN_ANNUAL_PRICE, 24900), days: 365 }
 };
 
+// Limites que a extensão respeita. O servidor não guarda campanha nem
+// publicação: ele devolve os números do plano e a extensão faz a autolimitação.
 const PLAN_LIMITS = {
   trial: {
-    contas: num(process.env.LIMIT_TRIAL_CONTAS, 1),
+    gruposPorDia: num(process.env.LIMIT_TRIAL_GRUPOS_DIA, 10),
     campanhasAtivas: num(process.env.LIMIT_TRIAL_CAMPANHAS, 3),
-    destinosPorCampanha: num(process.env.LIMIT_TRIAL_DESTINOS, 20)
+    destinosPorCampanha: num(process.env.LIMIT_TRIAL_DESTINOS, 5)
   },
   pro: {
-    contas: num(process.env.LIMIT_PRO_CONTAS, 10),
-    campanhasAtivas: num(process.env.LIMIT_PRO_CAMPANHAS, 200),
+    gruposPorDia: num(process.env.LIMIT_PRO_GRUPOS_DIA, 300),
+    campanhasAtivas: num(process.env.LIMIT_PRO_CAMPANHAS, 50),
     destinosPorCampanha: num(process.env.LIMIT_PRO_DESTINOS, 100)
   }
 };
@@ -50,14 +52,7 @@ const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT
 const INFINITEPAY_HANDLE = String(process.env.INFINITEPAY_HANDLE || '').trim();
 const INFINITEPAY_API = process.env.INFINITEPAY_API || 'https://api.checkout.infinitepay.io';
 
-// Navegador do executor. Vazio = usar o Chromium que o puppeteer baixou.
-// Preencha quando a máquina já tem um Chrome/Chromium instalado, ou quando o
-// download do navegador falhar por falta de internet.
-const CHROME_PATH = String(process.env.CHROME_PATH || '').trim();
-
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT_DIR, 'data'));
-const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
-const PROFILES_DIR = path.join(DATA_DIR, 'facebook-profiles');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
 const TRUST_PROXY = process.env.TRUST_PROXY || '';
@@ -66,6 +61,18 @@ const SESSION_COOKIE = 'postador_session';
 const CSRF_COOKIE = 'postador_csrf';
 const CSRF_HEADER = 'x-csrf-token';
 
+// Origens da extensão autorizada a chamar a API. Cada item é o ID da extensão
+// sem o prefixo: em `chrome://extensions` aparece como `ID` e a extensão
+// manda `chrome-extension://<ID>` como origem. Vazio = nenhuma extensão pode
+// chamar a API, e nenhuma requisição de origem desconhecida passa.
+const EXTENSAO_IDS = list(process.env.EXTENSAO_IDS);
+const TOKEN_EXTENSAO_DIAS = num(process.env.TOKEN_EXTENSAO_DIAS, 30);
+
+// Bloqueio por tentativas erradas de login. O rate limit por IP segura uma
+// origem; isto segura uma conta que sofre tentativa de muitos IPs diferentes.
+const LOGIN_FALHAS_MAX = num(process.env.LOGIN_FALHAS_MAX, 8);
+const LOGIN_BLOQUEIO_MINUTOS = num(process.env.LOGIN_BLOQUEIO_MINUTOS, 15);
+
 const MAX_IMAGE_BYTES = num(process.env.MAX_IMAGE_BYTES, 8 * 1024 * 1024);
 const MAX_TEXTOS = num(process.env.MAX_TEXTOS, 20);
 const MAX_TEXT_LENGTH = num(process.env.MAX_TEXT_LENGTH, 5000);
@@ -73,20 +80,12 @@ const MAX_CAMPANHA_NOME = num(process.env.MAX_CAMPANHA_NOME, 100);
 const MIN_LEAD_MINUTES = num(process.env.MIN_LEAD_MINUTES, 2);
 const MAX_DIAS_AGENDAMENTO = num(process.env.MAX_DIAS_AGENDAMENTO, 90);
 
-const MAX_TENTATIVAS = num(process.env.MAX_TENTATIVAS, 3);
-const RETRY_BASE_MINUTES = num(process.env.RETRY_BASE_MINUTES, 10);
-const RETRY_MAX_MINUTES = num(process.env.RETRY_MAX_MINUTES, 240);
-const FILA_INTERVALO_SEGUNDOS = num(process.env.FILA_INTERVALO_SEGUNDOS, 30);
-
-const MAX_NAVEGADORES_CONCORRENTES = Math.max(1, num(process.env.MAX_NAVEGADORES_CONCORRENTES, 2));
-const MAX_NAVEGADORES_POR_USUARIO = Math.max(1, num(process.env.MAX_NAVEGADORES_POR_USUARIO, 1));
-const NAVEGADOR_IDLE_MS = num(process.env.NAVEGADOR_IDLE_MS, 10 * 60 * 1000);
-const EXECUTOR_TIMEOUT_MS = num(process.env.EXECUTOR_TIMEOUT_MS, 45 * 60 * 1000);
-
-const CADENCIA_MIN_MS = num(process.env.CADENCIA_MIN_MS, 35);
-const CADENCIA_MAX_MS = num(process.env.CADENCIA_MAX_MS, 95);
+// Ritmo de publicação. É o que evita bloqueio de conta: nunca publique em
+// rajada. Os mesmos números são levados para a extensão.
 const DELAY_ENTRE_POSTS_MIN = num(process.env.DELAY_ENTRE_POSTS_MIN, 25);
 const DELAY_ENTRE_POSTS_MAX = num(process.env.DELAY_ENTRE_POSTS_MAX, 60);
+const CADENCIA_MIN_MS = num(process.env.CADENCIA_MIN_MS, 35);
+const CADENCIA_MAX_MS = num(process.env.CADENCIA_MAX_MS, 95);
 
 const ADMIN_EMAILS = list(process.env.ADMIN_EMAILS);
 const SMTP = {
@@ -124,7 +123,7 @@ const RATE_LIMITS = {
   excluirConta: num(process.env.RATE_LIMIT_EXCLUIR_CONTA, 5)
 };
 
-for (const dir of [DATA_DIR, UPLOADS_DIR, PROFILES_DIR, BACKUP_DIR]) {
+for (const dir of [DATA_DIR, BACKUP_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -142,13 +141,14 @@ const config = {
   SESSION_COOKIE,
   CSRF_COOKIE,
   CSRF_HEADER,
+  EXTENSAO_IDS,
+  TOKEN_EXTENSAO_DIAS,
+  LOGIN_FALHAS_MAX,
+  LOGIN_BLOQUEIO_MINUTOS,
   INFINITEPAY_HANDLE,
   INFINITEPAY_API,
-  CHROME_PATH,
   TRUST_PROXY,
   DATA_DIR,
-  UPLOADS_DIR,
-  PROFILES_DIR,
   BACKUP_DIR,
   MAX_IMAGE_BYTES,
   MAX_TEXTOS,
@@ -156,16 +156,6 @@ const config = {
   MAX_CAMPANHA_NOME,
   MIN_LEAD_MINUTES,
   MAX_DIAS_AGENDAMENTO,
-  MAX_TENTATIVAS,
-  RETRY_BASE_MINUTES,
-  RETRY_MAX_MINUTES,
-  FILA_INTERVALO_SEGUNDOS,
-  MAX_NAVEGADORES_CONCORRENTES,
-  MAX_NAVEGADORES_POR_USUARIO,
-  NAVEGADOR_IDLE_MS,
-  EXECUTOR_TIMEOUT_MS,
-  CADENCIA_MIN_MS,
-  CADENCIA_MAX_MS,
   DELAY_ENTRE_POSTS_MIN,
   DELAY_ENTRE_POSTS_MAX,
   ADMIN_EMAILS,
@@ -200,6 +190,14 @@ function validarConfig() {
     avisos.push('ADMIN_EMAILS vazio: nenhum usuário terá acesso ao painel administrativo.');
   }
 
+  if (!EXTENSAO_IDS.length) {
+    avisos.push('EXTENSAO_IDS vazio: nenhuma extensão está autorizada a chamar a API. A extensão não vai funcionar até você colocar o ID dela aqui.');
+  }
+
+  if (TOKEN_EXTENSAO_DIAS < 1 || TOKEN_EXTENSAO_DIAS > 365) {
+    problemas.push('TOKEN_EXTENSAO_DIAS precisa estar entre 1 e 365 dias.');
+  }
+
   if (!SMTP_ENABLED) {
     if (IS_PROD) {
       problemas.push('SMTP é obrigatório em produção: sem ele o cliente não consegue recuperar a senha.');
@@ -210,10 +208,6 @@ function validarConfig() {
 
   if (EXPOSIR_LINK_REDEFINICAO) {
     avisos.push('EXPOSIR_LINK_REDEFINICAO ligado: a API devolve o link de redefinição de senha. Nunca use fora de desenvolvimento.');
-  }
-
-  if (CHROME_PATH && !fs.existsSync(CHROME_PATH)) {
-    problemas.push(`CHROME_PATH aponta para um arquivo que não existe: ${CHROME_PATH}.`);
   }
 
   if (DELAY_ENTRE_POSTS_MAX < DELAY_ENTRE_POSTS_MIN) {

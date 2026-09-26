@@ -12,35 +12,29 @@ set -euo pipefail
 REPO_DIR="$HOME/postador-pro"
 cd "$REPO_DIR"
 
-echo "==> [1/6] Backup antes de mexer"
+echo "==> [1/5] Backup antes de mexer"
 node scripts/backup.js criar
 
-echo "==> [2/6] Baixando a versão nova"
+echo "==> [2/5] Baixando a versão nova"
 git pull --ff-only
 
-echo "==> [3/6] Dependências"
+echo "==> [3/5] Dependências"
 if [ -f package-lock.json ]; then
   npm ci --omit=dev
 else
   npm install --omit=dev
 fi
 
-# O Chromium do puppeteer mora fora do node_modules. Em servidores que já
-# rodavam esta instalação, ele continua instalado; o comando abaixo é inofensivo
-# se o navegador já existir.
-echo "==> [4/6] Conferindo o Chromium do puppeteer"
-npx puppeteer browsers install chrome
-
-echo "==> [5/6] Conferindo a configuração"
+echo "==> [4/5] Conferindo a configuração"
 # Não sobe o servidor: o preflight e a validação abortam em caso de
-# configuração inválida (SMTP ausente, URL sem HTTPS, navegador faltando).
+# configuração inválida (SMTP ausente, URL sem HTTPS).
 node scripts/preflight.js
 node -e "
 const { problemas } = require('./src/config').validarConfig();
 if (problemas.length) { for (const p of problemas) console.error('problema:', p); process.exit(1); }
 "
 
-echo "==> [6/6] Reiniciando"
+echo "==> [5/5] Reiniciando"
 # update --force é o que faz o PM2 reler o ecosystem.config.js (kill_timeout,
 # logs, etc). Um restart puro manteria a configuração antiga em memória.
 pm2 startOrReload ecosystem.config.js --update-env

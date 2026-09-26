@@ -1,0 +1,106 @@
+{
+  // Configuração do Worker da API de licença do Postador Pro.
+  //
+  // Depois de `npm run setup` (cria o D1 e preenche o id), este arquivo sobe
+  // sem nenhum outro passo. O domínio público é o subdomínio `workers.dev`,
+  // que é gratuito e não exige registro de domínio.
+  //
+  //   npx wrangler deploy
+  //
+  // O endpoint público sai aqui:
+  //   https://postador-pro-api.<seu-subdominio>.workers.dev
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "postador-pro-api",
+  "main": "src/index.js",
+  // Data mais recente suportada pelo runtime instalado. Ficar na frente dela faz
+  // o Wrangler voltar para a última compatível e avisar; subir o valor junto com
+  // `wrangler update` é o que libera os recursos mais novos.
+  "compatibility_date": "2025-09-06",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Os arquivos de public/ (landing, redefinir, admin, termos, privacidade) são
+  // servidos direto do edge, sem passar pelo Worker. São ilimitados e grátis.
+  "assets": {
+    "directory": "../public",
+    "binding": "ASSETS",
+    // Uma página que não existe precisa cair no Worker, e não num 404 cru do
+    // servidor de estáticos: é lá que mora /api/*, o webhook e o 404 em JSON.
+    "not_found_handling": "none",
+    "html_handling": "auto-trailing-slash"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "postador-pro",
+      // Banco já existente no painel. Os comandos aceitam o binding (`DB`) em
+      // vez do nome, então o `database_name` abaixo não precisa bater com o que
+      // está no painel.
+      "database_id": "56917f6b-7b87-4578-bc8c-f28f129b93b9",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Bucket de e-mail. Exige um domínio habilitado em Email Sending
+  // (`npx wrangler email sending enable seudominio.com`), então só entra no
+  // arquivo depois que isso existir. Sem o binding, a recuperação de senha cai
+  // no modo de desenvolvimento: registra o link no log em vez de enviar.
+  // "send_email": [{ "name": "EMAIL", "remote": true }],
+
+  // Limite geral da API por janela curta, no edge. Precisa de Workers Paid.
+  //
+  // Deixado de fora de propósito: o campo `ratelimits` é recusado pelo Wrangler
+  // 4.x ("Unexpected fields found in top-level field"), então subir a config
+  // com ele quebraria o `wrangler dev` e o deploy de todo mundo. Sem estes
+  // bindings, `security.limiteGeral` e o teto do webhook em `index.js` já
+  // detectam a ausência (`if (!binding) return next()`) e o produto funciona
+  // só com o rate limit no D1.
+  //
+  // Para ligar depois, no painel: Workers > Limits > Rate Limiting Bindings, com
+  // janela de 60 s, e depois acrescente aqui:
+  //   "ratelimits": [
+  //     { "name": "RL_GERAL",   "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } },
+  //     { "name": "RL_WEBHOOK", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } }
+  //   ]
+
+  // Limpeza de sessões, resets e janelas de rate limit vencidas. No plano
+  // gratuito a conta inteira comporta 5 cron triggers.
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  "vars": {
+    "IS_PROD": "1",
+    // Preenchido por `npm run setup`. A tag da InfinitePay já é conhecida.
+    "INFINITEPAY_HANDLE": "servicoslucas",
+    "ADMIN_EMAILS": "",
+    "EXTENSAO_IDS": "",
+    "EMAIL_FROM": "",
+    "TRIAL_DAYS": "7",
+    "SESSION_DAYS": "30",
+    "TOKEN_EXTENSAO_DIAS": "30",
+    "LOGIN_FALHAS_MAX": "8",
+    "LOGIN_BLOQUEIO_MINUTOS": "15",
+    "RESET_TOKEN_MINUTES": "60",
+    "PBKDF2_ITERACOES": "100000",
+    "PLAN_MONTHLY_PRICE": "2500",
+    "PLAN_ANNUAL_PRICE": "24900",
+    "LIMIT_TRIAL_GRUPOS_DIA": "10",
+    "LIMIT_TRIAL_CAMPANHAS": "3",
+    "LIMIT_TRIAL_DESTINOS": "5",
+    "LIMIT_PRO_GRUPOS_DIA": "300",
+    "LIMIT_PRO_CAMPANHAS": "50",
+    "LIMIT_PRO_DESTINOS": "100",
+    "RATE_LIMIT_REGISTRO": "5",
+    "RATE_LIMIT_LOGIN": "10",
+    "RATE_LIMIT_RECUPERAR": "5",
+    "RATE_LIMIT_TROCA_SENHA": "10",
+    "RATE_LIMIT_REDEFINIR": "10",
+    "RATE_LIMIT_EXCLUIR_CONTA": "5"
+  }
+}

@@ -68,11 +68,33 @@ function usuarioId(req) {
 
 const METODOS_SEGUROS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+const RE_EXTENSAO = /^chrome-extension:\/\/([a-p]{32})$/;
+
+function idDaExtensao(origem) {
+  const achado = RE_EXTENSAO.exec(String(origem || ''));
+  return achado ? achado[1] : null;
+}
+
+function origemExtensaoPermitida(origem) {
+  const id = idDaExtensao(origem);
+  return Boolean(id) && config.EXTENSAO_IDS.includes(id);
+}
+
+// `Authorization: Bearer` só chega aqui se o navegador aprovou a origem via
+// CORS. Uma página comum não consegue forjar esse cabeçalho numa requisição
+// cross-site, então quem tem token não precisa de CSRF por cookie.
+function temTokenBearer(req) {
+  return /^Bearer\s+\S+/i.test(String(req.get('authorization') || ''));
+}
+
 function aplicarOrigem(req, res, next) {
   if (METODOS_SEGUROS.has(req.method)) return next();
+  if (temTokenBearer(req)) return next();
 
   const origem = req.get('origin');
   const permitido = config.PUBLIC_BASE_URL;
+
+  if (origem && origemExtensaoPermitida(origem)) return next();
 
   if (!origem) {
     const referer = req.get('referer');
@@ -103,6 +125,8 @@ function aplicarOrigem(req, res, next) {
 
 function aplicarCsrf(req, res, next) {
   if (METODOS_SEGUROS.has(req.method)) return next();
+  // Token da extensão: não há cookie nem cabeçalho CSRF para conferir.
+  if (temTokenBearer(req)) return next();
 
   const cookie = req.cookies?.[config.CSRF_COOKIE];
   const header = req.get(config.CSRF_HEADER);
@@ -177,5 +201,8 @@ module.exports = {
   assegurarCsrf,
   aplicarOrigem,
   aplicarCsrf,
+  idDaExtensao,
+  origemExtensaoPermitida,
+  temTokenBearer,
   METODOS_SEGUROS
 };

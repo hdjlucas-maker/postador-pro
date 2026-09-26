@@ -1,368 +1,295 @@
 # DIRETRIZES — Postador Pro
 
-> **Leia este arquivo ANTES de tocar em qualquer coisa.**
-> Ele existe para você não redescrever o projeto de novo.
-> Se algo aqui estiver errado, corrija o arquivo — não ignore.
+> Leia antes de tocar em qualquer coisa. Se algo aqui estiver errado, corrija o
+> arquivo em vez de ignorar.
+
+Repositório: https://github.com/hdjlucas-maker/postador-pro
 
 ---
 
-## 1. O que é este projeto
+## 1. O que é o produto
 
-SaaS que resolve um problema específico: **divulgar produtos em grupos do
-Facebook em massa**. O usuário conecta uma conta do Facebook (login manual na
-janela do Chromium, a senha nunca passa pelo app), cria campanhas com texto,
-imagens, destinos e horário, e o servidor publica no horário marcado.
+Uma **extensão de navegador** que o usuário instala na própria máquina.
 
-Cobrança por assinatura (InfinitePay), painel administrativo e página pública.
+O usuário instala a extensão, já com a **conta do Facebook dele** logada no
+navegador dele, cria campanhas com texto, imagem, lista de grupos e horário, e a
+extensão publica. A senha do Facebook nunca entra no produto, em nenhuma
+hipótese.
 
-**O produto não é o código. O produto é a publicação funcionando.** Se o
-executor quebrar, tudo quebra — inclusive a venda.
+Não é SaaS. Não é painel web. Não é página pública. Não há navegador aberto em
+servidor. Não há perfil de navegador guardado em servidor.
 
----
+## 2. Para que serve
 
-## 2. Regras inegociáveis
+Divulgar produtos em grupos do Facebook em massa, com limite de tempo e custo
+mensal ou anual, dentro de um ritmo que não derruba a conta do usuário.
 
-Estas regras existem porque descumpri-las já custou tempo e risco:
+Funções do produto:
 
-1. **Não reescreva a estrutura.** A arquitetura em `src/` já está pronta e
-   testada. Não crie módulos novos, não renomeie, não mova arquivos sem um
-   motivo concreto e escrito aqui.
-2. **Não toque no `src/postador.js`.** É o executor de publicação. Se precisar
-   de mudança lá, leia o original no git antes:
-   `git show HEAD:postador.js`.
-3. **`instances: 1` no PM2. Point final.** A fila e a reserva de cobrança
-   idempotente vivem na memória do processo. Duas instâncias = compra liberada
-   duas vezes e campanha publicada em paralelo. Escalar exige banco
-   compartilhado e bloqueio distribuído — não é ajuste de configuração.
-4. **Não versione `data/`.** Contém sessões, e-mails, hashes de senha e os
-   perfis do navegador do cliente. Já está no `.gitignore`.
-5. **Antes de criar arquivo, verifique se já existe.** Use `grep`/`glob` antes
-   de `write`. Duplicar função é como a suíte começa a divergir da realidade.
-6. **Toda mudança precisa de verificação.** Se não tem como rodar, diga
-   explicitamente que não foi verificado. Não declare pronto o que não testou.
-7. **Não delete arquivo sem confirmar que foi movido.** Use `git mv` para
-   mover, para o histórico preservar a origem.
-8. **Português nos comentários e nos textos de interface.** Sem exceção.
-9. **Nada de emoji em código ou arquivo**, salvo pedido explícito.
+- publicar texto e imagem em vários grupos;
+- agendar a publicação por horário;
+- delay aleatório entre publicações, para evitar bloqueio de conta;
+- histórico do que foi publicado e do que falhou;
+- teste limitado, plano mensal e plano anual;
+- cobrança pela InfinitePay.
 
----
+## 3. Como está dividido
 
-## 3. Arquitetura atual
+Dois pedaços, com uma fronteira clara entre eles.
+
+**A extensão** (na máquina do cliente) — toda a publicação. Campanhas, textos,
+imagens, destino, horário, histórico, delay, agendamento e contadores de uso
+vivem no navegador do cliente. A extensão publica na aba em que o próprio
+usuário está logado.
+
+**O servidor mínimo** — só a assinatura. Quatro funções: autenticar o usuário,
+dizer se a assinatura está ativa e até quando, receber o webhook da InfinitePay
+para liberar ou renovar, e servir o arquivo de download da extensão. Nada mais.
+
+### Por que o servidor não some inteiro
+
+O webhook da InfinitePay só é chamado por HTTPS público, e extensão não tem
+URL. Logo existe uma URL pública em algum lugar. O que muda é o tamanho do que
+fica atrás dela: uma API pequena, sem navegador, sem display virtual, sem 4 GB
+de RAM.
+
+### Agendamento depende do navegador aberto
+
+No Manifest V3 o Chrome encerra o service worker após inatividade, e
+`chrome.alarms` só dispara com o navegador ligado. Uma publicação programada
+para as 3h acontece se o Chrome estiver aberto às 3h. Isso é o comportamento do
+produto e está escrito na interface e nos termos, não escondido.
+
+## 4. Arquitetura atual
 
 ```
-server.js              boot: HTTP, fila, agendamentos, shutdown
-ecosystem.config.js    PM2 (instances:1, kill_timeout, DISPLAY)
+extensao/                  A SER CRIADA (etapa A). Nada existe ainda.
+  manifest.json            Manifest V3
+  background/              service worker: alarmas, fila, orquestração
+  content/                 DOM do Facebook: digita, anexa, publica
+  popup/ options/          interface
+  lib/                     armazenamento local, licença, imagens
+
+server.js                  boot da API de licença
 src/
-  app.js               middlewares, rotas, criação do Express
-  http.js              cookies, cabeçalhos de segurança, CSP
-  config.js            .env, planos, limites, validação de boot
-  db.js                NeDB, índices, compactação, backup
-  log.js               log JSON estruturado (info/warn/error/debug)
-  auth.js              sessões, hash de senha, tokens de redefinição
-  security.js          CSRF, verificação de origem, rate limit, sanitização
-  email.js             SMTP: recuperação de senha e confirmação de pagamento
-  cron-agenda.js       intervalo em minutos -> expressão cron válida
-  navegador.js         abertura do Chromium (Chrome do puppeteer ou CHROME_PATH)
-  queue.js             agrupamento, concorrência por conta, retentativas
-  facebook.js          perfis isolados, ciclo de vida, janela de login
-  postador.js          EXECUTOR: digita, rola, publica no grupo
-  billing.js           checkout, webhook, idempotência
-  accounts.js          contas Facebook conectadas
-  admin.js             painel administrativo
+  app.js                   middlewares, rotas, criação do Express
+  http.js                  cookies, cabeçalhos de segurança, CSP
+  config.js                .env, planos, limites, validação de boot
+  db.js                    NeDB, índices, compactação, backup
+  log.js                   log JSON estruturado
+  auth.js                  sessões, hash de senha, tokens de redefinição
+  security.js              CSRF, verificação de origem, rate limit
+  email.js                 SMTP: recuperação de senha
+  billing.js               checkout, webhook, idempotência
+  admin.js                 painel administrativo
   routes/
-    auth.js            cadastro, login, sessão, recuperação, redefinição
-    campaigns.js       campanhas, posts, histórico
-    accounts.js        conectar/desconectar Facebook
-    billing.js         checkout e status de pagamento
-    uploads.js         imagens
-    helpers.js         utilitários de rota
-    admin.js           rotas administrativas
-public/                index.html, termos.html, privacidade.html, assets/
-data/                  bancos, perfis, uploads, backups (NÃO versionar)
-tests/smoke.test.js    69 verificações
-scripts/               check-syntax.js, check-modulos.js, preflight.js,
-                       backup.js, testar-navegador.js, testar-backup.js
+    auth.js                cadastro, login, sessão, recuperação
+    billing.js             checkout e status de pagamento
+    admin.js               rotas administrativas
+public/
+  termos.html              termos de uso e responsabilidade
+  privacidade.html         política de dados
+  index.html               vira a interface da extensão
+  assets/
+tests/smoke.test.js        suíte de fumaça do servidor
+scripts/                   check-syntax, check-modulos, backup, preflight
+data/                      bancos e backups (NÃO versionar)
 ```
 
-### Fluxo de uma publicação (não quebrar)
+## 5. Regras inegociáveis
 
-```
-cron/agendamento → queue.js agrupa por conta → postador.js abrir perfil
-→ publica em cada destino → resultado volta → ok ou retentativa
-```
+1. **Não reescreva a estrutura.** Os módulos em `src/` estão prontos e
+   testados. Só mude o que a tarefa pedir.
+2. **`instances: 1` no PM2.** A reserva de cobrança idempotente depende de um
+   processo só. Duas instâncias = mesma compra liberada duas vezes.
+3. **Não versione `data/`.** Tem sessões, e-mails e hashes de senha. Já está no
+   `.gitignore`.
+4. **Antes de criar arquivo, verifique se já existe.** Use `grep`/`glob` antes
+   de `write`.
+5. **Toda mudança precisa de verificação.** Se não deu para rodar, diga
+   explicitamente que não foi verificado. Não declare pronto o que não testou.
+6. **Português nos comentários e nos textos de interface.** Sem exceção.
+7. **Nada de emoji em código ou arquivo**, salvo pedido explícito.
+8. **Não apague código antes de o substituto existir e funcionar.** Remoção vem
+   depois da verificação, nunca antes.
 
-- `postador.js` abre o navegador com o perfil isolado da conta
-  (`config.PROFILES_DIR` + `profileDir` do post).
-- Publicações da **mesma conta** vão no mesmo navegador, em sequência, com
-  espera aleatória entre elas. Só a primeira verifica login.
-- `queue.js` garante uma execução por conta por vez e retoma o que ficou
-  pendente quando o servidor reinicia.
+## 6. O que já está feito
 
----
+**No servidor**
 
-## 4. Segurança — o que já está feito
-
-| Proteção | Onde |
-|---|---|
-| Senha com hash + salt | `auth.js` |
-| Cookie de sessão `httpOnly` + `SameSite` + `Secure` em HTTPS | `http.js`, `config.js` |
-| CSRF: token em cookie + header obrigatório em escrita | `security.js` |
-| Verificação de `Origin`/`Referer` | `security.js` |
-| Rate limit por IP nas rotas de auth | `security.js` |
-| Só `public/` é servido; `.env`, `data/`, `*.db` e fonte retornam 404 | `app.js` |
-| Upload: tipo, tamanho, nome e dono validados | `routes/uploads.js` |
-| Sanitização de entrada | `security.js` |
-| CSP: `script-src 'self'` (estrito), `object-src 'none'`, `frame-ancestors 'none'` | `http.js` |
-| Isolamento entre usuários em toda leitura de dado | `routes/*` |
-| Link de redefinição nunca exposto em produção | `config.js` |
-| Admin só para `ADMIN_EMAILS` | `config.js`, `routes/admin.js` |
-| App não sobe com SMTP ausente em produção | `config.js` |
-
-### Pagamento idempotente
-
-`billing.js` reivindica o registro com escrita condicional
-(`aplicadoEm: { $exists: false }`). Dois webhooks simultâneos não concedem a
-mesma compra duas vezes. Renovação acumula sobre a data atual.
-
-> Isso só é seguro com **um processo** (regra 3).
-
----
-
-## 5. Verificação
-
-```bash
-npm run lint   # sintaxe de todos os .js + chamadas entre módulos
-npm test       # 69 verificações: auth, isolamento, CSRF, fila, cobrança, admin
-```
-
-O estado atual é **69/69 passando** e lint limpo. Não aceito regressão.
-
-A suíte sobe o app no próprio processo, com `DATA_DIR` temporário, e **não
-publica de verdade** (não há Chrome no ambiente de teste). A publicação real
-é a Etapa 5, com o produto no ar.
-
-Verificações além da suíte:
-
-```bash
-npm run preflight           # o que impede a subida em produção
-npm run verificar:navegador # Chrome sobe, navega e digita
-npm run verificar:backup    # cria backup, apaga o banco, restaura e confere
-npm run backup -- listar    # backups disponíveis na VPS
-
-node scripts/smoke-online.js https://seu-dominio   # a instância no ar
-```
-
-`preflight` sai com código 1 se algo impedir a publicação (navegador
-ausente, disco cheio, pasta sem escrita, display virtual parado, SMTP
-faltando em produção). Ele é exatamente o filtro que faltava entre "rodei o
-deploy" e "descobri no meio da campanha que nada funciona".
-
----
-
-## 6. Correções já feitas (não é preciso reverificar)
-
-**Núcleo**
-- Reescrita do `server.js` monolith (1.534 → 109 linhas) em `src/`, com
-  módulos por responsabilidade e rotas separadas.
-- Removidos da raiz: `index.html` (29 KB, interface antiga), `facebook.js` e
-  `postador.js`. O executor foi para `src/postador.js` e o login para
-  `src/facebook.js`.
-
-**Bugs corrigidos**
-- `postador.js` usava `grupo` antes da declaração — a fila nunca publicava
-  nada e o erro era engolido. Corrigido em `queue.js`.
-- `log.error` não existia (só `log.erro`): 13 chamadas lançavam `TypeError` e
-  mascaravam o erro real. Adicionado alias `error` em `log.js`.
-- `security.js`: função `assegurarCsrf` estava com nome diferente do que os
-  chamadores usavam. `Origin`ava uma variável inexistente. Ambos corrigidos.
-- Recuperação de senha: o backend gerava `?token=` e o frontend lia
-  `?token` (sem valor). Corrigido.
-- `linkDev` vazava o link de redefinição. Agora só funciona fora de
-  produção **e** só com `EXPOSIR_LINK_REDEFINICAO=1`.
-- Idempotência de pagamento: o NeDB retornava contagem numérica e a reserva
-  falhava silenciosamente. Corrigido para tratar os dois formatos.
-- Checkout validava o plano **depois** de reclamar a configuração da
-  InfinitePay. Invertido: entrada inválida devolve 400 mesmo sem handle.
-- Exposição de arquivos: `.env`, `data/`, `*.db` e fonte eram servidos. Agora
+- API de Express com middlewares de segurança, rotas separadas e shutdown limpo.
+- Autenticação com hash bcrypt e salt, sessão em cookie `httpOnly` + `SameSite`
+  + `Secure` em HTTPS, e recuperação de senha por SMTP.
+- **Token para a extensão**: `Authorization: Bearer` com o valor guardado só
+  como SHA-256. A extensão não tem cookie jar — cookie `SameSite` não atravessa
+  a fronteira da extensão, então sessão por cookie não funcionaria.
+- Allowlist de origem da extensão: só `chrome-extension://<ID>` listados em
+  `EXTENSAO_IDS` passam, e só eles recebem cabeçalho de CORS. Página comum não
+  ganha CORS nenhum.
+- `Cross-Origin-Resource-Policy: cross-origin` só nas rotas `/api/`; o HTML
+  continua `same-origin`. Com `same-origin` em todo lugar, o navegador
+  descartaria a resposta antes de a extensão ler.
+- Proteção CSRF por token em cookie com header obrigatório em escrita, mais
+  verificação de `Origin`/`Referer`. As rotas `/extensao/*` ficam de fora: elas
+  autenticam por token, e sem token quem responde é 401, não 403 de CSRF.
+- Rate limit por IP nas rotas sensíveis, mais trava de conta por tentativas
+  erradas em sequência (`LOGIN_FALHAS_MAX`), que segura o ataque vindo de IPs
+  diferentes.
+- `/api/estado` exige login e `ADMIN_EMAILS`: ele revelava se o SMTP e a
+  InfinitePay estavam configurados.
+- Isolamento entre usuários em toda leitura de dado.
+- Somente `public/` é servido; `.env`, `data/`, `*.db` e código-fonte retornam
   404.
-- Token de CSRF: dois cookies com o mesmo nome faziam o servidor ler o
-  valor errado.
+- CSP com `script-src 'self'` estrito, `object-src 'none'` e
+  `frame-ancestors 'none'`.
+- Painel administrativo restrito a `ADMIN_EMAILS`.
+- App não sobe com SMTP ausente em produção.
+
+**Cobrança**
+
+- Checkout da InfinitePay com o handle configurável.
+- Webhook com escrita condicional (`aplicadoEm: { $exists: false }`): dois
+  webhooks simultâneos não concedem a mesma compra duas vezes.
+- Renovação acumula sobre a data atual.
+- Validação de plano acontece antes de reclamar a configuração de pagamento,
+  então entrada inválida devolve 400 mesmo sem handle.
 
 **Infraestrutura**
-- `*/360 * * * *` no cron do backup: **inválido** — o campo de minutos vai de
-  0 a 59, então o backup nunca rodava em produção. Criado `src/cron-agenda.js`
-  para distribuir o intervalo entre hora e minuto (`0 */6 * * *`), com
-  validação no boot e testes.
-- CSP: havia 23 atributos `style=` inline que seriam bloqueados. Liberado
-  `style-src 'unsafe-inline'` (estilo não executa JS). `script-src` continua
-  estrito.
-- `ecosystem.config.js`: `kill_timeout: 60000` (o PM2 matava o processo no
-  meio de uma publicação), `restart_delay`, logs.
-- `update.sh` e `deploy-vps.sh` reescritos: backup antes do `git pull`,
-  validação de configuração antes de reiniciar, `startOrReload` para reler o
-  ecosystem, `mkdir` de `data/backups` e `logs/`.
-- `.env.example` reescrito (estava com texto corrompido) com todas as
-  variáveis que `config.js` realmente lê, comentadas.
-- `.gitignore`: `data/` inteiro, logs e `uploads/`.
-- `README.md` reescrito com a estrutura real.
+
+- NeDB com índices, compactação periódica e backup com retenção
+  configurável (`BACKUPS_MAXIMOS`, padrão 30).
+- `scripts/backup.js` cria, lista e **restaura** backup pela linha de comando.
+- `scripts/preflight.js` confere disco, permissões de escrita e configuração
+  antes de subir, e sai com código 1 se algo impedir o serviço.
+- `scripts/check-syntax.js` e `scripts/check-modulos.js` conferem sintaxe de
+  todos os `.js`, as chamadas entre módulos e as chamadas a funções do próprio
+  arquivo. Um erro de digitação como `addMinutos` no lugar de `addMinutes` tem
+  sintaxe válida e só quebra em tempo de execução; o lint pega antes.
+- `.gitignore` cobre `data/`, logs e uploads. `.gitattributes` força LF em
+  tudo, senão os scripts bash chegam na máquina errada com CRLF.
+
+**Interface no servidor**
+
+- Três telas, e só três: a página de instalação (`/`), a recuperação de senha
+  (`/redefinir`) e o painel do administrador (`/admin`). Visual no azul do
+  Facebook, para o cliente não confundir com o Facebook nem com um painel
+  quebrado.
+- O painel SaaS antigo foi apagado. Ele abria, mas cada botão chamava rota que
+  não existe mais: o usuário via um menu de campanha e não acontecia nada.
+- Termos e privacidade reescritos para o modelo real: dados locais na
+  extensão, servidor só com conta e licença.
 
 **Testes**
-- Suíte de fumaça em processo próprio: 69 verificações cobrindo auth,
-  isolamento multi-tenant, limites de plano, CSRF, origem, exposição de
-  arquivos, upload, fila, cobrança, admin, agendamentos e rate limit.
 
----
+- Suíte de fumaça em processo próprio, com `DATA_DIR` temporário: 60
+  verificações cobrindo auth, isolamento entre usuários, limites de plano, CSRF,
+  origem, exposição de arquivos, cobrança, admin, rate limit, token da
+  extensão, trava de conta e CORP. Inclui a prova de que as rotas da antiga
+  arquitetura (`/api/campaigns`, `/api/dashboard`,
+  `/api/facebook/accounts`, `/api/uploads`) respondem 404.
 
-## 7. Estado do git
+## 7. O que falta
 
-- Commit `e251cfd` em `main`, enviado para `origin/main`.
-- `.env` e `data/` **não** são versionados (`.gitignore`).
-- `.gitattributes` força LF em tudo. Sem ele os scripts bash iam para a VPS
-  com CRLF e o servidor falharia com `bad interpreter: /bin/bash^M`.
-- Ao commitar, confira sempre com `git status --porcelain` que nenhum `.env`,
-  `data/` ou `*.db` entrou na lista.
+Uma etapa por vez, na ordem. Cada etapa termina com `npm run lint && npm test`
+passando e esta seção atualizada.
 
----
+**Etapa A — Enxugar o servidor até sobrar só a licença** (FEITA)
+- [x] Remover o executor, os perfis de navegador e a fila de publicação
+- [x] Remover as rotas de campanha, conta conectada e upload
+- [x] Tirar `puppeteer` e `node-cron`; trocar o cron de backup por relógio de
+      intervalo, sem os dois campos de hora e minuto
+- [x] Deixar o banco com quatro coleções: usuários, sessões, pagamentos e
+      tokens de redefinição
+- [x] Reescrever a suíte de testes para o que ficou
+- [x] Atualizar `README.md`, `.env.example`, `ecosystem.config.js` e os scripts
+      de deploy
 
-## 8. Plano por etapas
+**Etapa A2 — Fechar a superfície da API e matar a interface inerte** (FEITA)
+- [x] Token `Authorization: Bearer` para a extensão, sem depender de cookie
+- [x] `EXTENSAO_IDS` como allowlist de origem, com CORS só para elas
+- [x] `Cross-Origin-Resource-Policy` liberada em `/api/` e mantida restrita no
+      HTML
+- [x] CSRF liberado nas rotas `/extensao/*`, que não têm cookie jar
+- [x] `/api/estado` fechado para administradores
+- [x] Trava de conta por falhas de login, além do rate limit por IP
+- [x] Apagar o painel SaaS inerte e deixar três telas: instalação, redefinição
+      de senha e administração
+- [x] Reescrever termos e privacidade para o modelo de dados local
+- [x] 60 verificações cobrindo o que acima
 
-O objetivo é **publicar o produto online** e vendê-lo. O teste de publicação
-real no Facebook é o **último** passo, com o produto no ar e usuário de
-verdade — não é tarefa de agora. Não travou a etapa atual.
+**Etapa B — Esqueleto da extensão**
+- [ ] `extensao/manifest.json` no Manifest V3
+- [ ] Popup mínimo que abre, com versão e botão de login
+- [ ] `lib/armazenamento.js`: IndexedDB para imagem, `storage` para o resto
+- [ ] Carregar em `chrome://extensions` sem erro no console
 
-### Etapa 1 — Publicação online (atual)
-- [x] Código modular, segurança fechada, 69/69 testes
-- [x] `deploy-vps.sh` e `update.sh` prontos
-- [x] `ecosystem.config.js` com `instances: 1` e `kill_timeout`
-- [x] Navegador com `CHROME_PATH` configurável
-- [x] `scripts/preflight.js`: confere navegador, disco, permissões, display
-      virtual e configuração antes de subir
-- [x] `scripts/backup.js`: criar, listar e **restaurar** backup pela linha de
-      comando (antes não havia como restaurar)
-- [x] Retenção de backup configurável (`BACKUPS_MAXIMOS`, padrão 30)
-- [x] `preflight` ligado ao `deploy-vps.sh` e ao `update.sh`
-- [x] `scripts/smoke-online.js`: confere a instância publicada de fora
-      (28 verificações: HTTPS, cabeçalhos, arquivos privados, API, páginas).
-      Validado contra uma instância local: 28/28
-- [ ] Subir na VPS, domínio, HTTPS e túnel
-- [ ] Rodar `node scripts/smoke-online.js https://seu-dominio` no ar
+**Etapa C — Publicação real em um grupo**
+- [ ] `content/facebook.js`: abrir o compositor, digitar, anexar imagem,
+      publicar
+- [ ] Teste em um grupo de verdade, com print do resultado
+- [ ] Só aqui o produto passa a existir
 
-> **O passo a passo está em [`GUIA-PUBLICACAO.md`](GUIA-PUBLICACAO.md)**:
-> como comprar o domínio, qual VPS escolher, configurar o túnel na Cloudflare,
-> SMTP e InfinitePay.
+**Etapa D — Campanhas, destinos e delay**
+- [ ] Criar campanha: texto, imagem, lista de grupos, horário
+- [ ] Fila sequencial com delay aleatório entre destinos
+- [ ] Agendamento por `chrome.alarms`, avisando que exige o navegador aberto
+- [ ] Histórico local: publicado, falhou, pulou
 
-### Sobre a URL do Cloudflare
+**Etapa E — Licença e limites**
+- [ ] `lib/licenca.js`: consulta o servidor, guarda o estado, tem carência
+      offline para não cobrar o usuário por falha nossa
+- [ ] Plano mensal e anual, período de teste, limites por plano
+- [ ] Ao vencer, a extensão para de publicar
+- [ ] Decidir como a extensão se autentica: cookie com `SameSite` não é enviado
+      em requisição de outra origem, então provavelmente token, não sessão
 
-A URL `trycloudflare.com` (Quick Tunnel) **não serve para vender**: ela muda
-toda vez que o túnel reinicia. Cliente receberia link morto. Para produto pago
-é obrigatório um domínio próprio com URL fixa.
+**Etapa F — Cobrança no servidor mínimo**
+- [ ] Rota de licença que a extensão consulta
+- [ ] Webhook da InfinitePay com a idempotência que já existe
+- [ ] Servir o `.zip` da extensão
+- [ ] Liberação automática e conferida
 
-A Cloudflare **não aluga VPS**. Ela faz DNS, HTTPS e o túnel. A VPS é
-contratada em outro provedor (Hetzner, Contabo, Vultr, Locaweb, Hostinger).
+**Etapa G — Termos, responsabilidade e dados**
+- [ ] `termos.html` e `privacidade.html` reescritos para extensão: o que fica
+      só no navegador, o que sai do servidor, e que publicar em grupo é
+      responsabilidade do usuário
+- [ ] Consentimento explícito no primeiro uso
+- [ ] Aviso sobre regra do Facebook e risco de bloqueio de conta
 
-Mínimo da VPS: **Ubuntu 24.04, 4 GB RAM, 2 vCPU, 40 GB disco**. Cada
-navegador do Facebook aberto consome 1 a 1,5 GB.
+**Etapa H — Empacotar e entregar**
+- [ ] Empacotador que gera o `.zip` instalável
+- [ ] Instrução de instalação para o cliente leigo
+- [ ] `verificar:extensao`: confere manifesto, permissões e sintaxe
 
-**Depois de subir, nesta ordem:**
-1. Preencher SMTP no `.env` — sem isso o app nem sobe
-2. `node scripts/preflight.js` — precisa responder "Pode subir"
-3. `node scripts/smoke-online.js https://seu-dominio` — precisa dar 28/28
-4. Só então repassar o link para o primeiro cliente
+## 8. Regras do código da extensão
 
-### Etapa 2 — Pagamento real
-- [x] InfinitePay: conta válida, InfiniteTag `$servicoslucas`
-- [ ] `INFINITEPAY_HANDLE=servicoslucas` no `.env` da VPS (sem o `$`)
-- [ ] Conferir recebimento habilitado e chave de API no painel InfinitePay
-- [ ] Compra de teste real de ponta a ponta (checkout → webhook → acesso)
-- [ ] Conferir que o acesso libera no prazo esperado
-- [ ] Conferir estorno/cancelamento (o que acontece com quem cancela)
+- **Manifest V3.** `host_permissions` para `facebook.com` e `web.facebook.com`.
+  Permissões: `storage`, `alarms`, `tabs`, `scripting`.
+- **Imagens em `IndexedDB`**, não em `storage`. A cota do `storage` estoura com
+  imagem.
+- **Delay aleatório entre publicações.** É o que evita bloqueio de conta. Os
+  valores já existem em `config.js` (`DELAY_ENTRE_POSTS_MIN`/`MAX`,
+  `CADENCIA_MIN_MS`/`MAX`) e são levados para a extensão.
+- **Nenhum acesso a senha ou cookie do Facebook.** A extensão publica na aba em
+  que o usuário já está logado. Ela não lê credencial nenhuma.
 
-> O `webhook_url` é `https://seudominio.com/api/webhooks/infinitepay` e precisa
-> ser público e HTTPS. Por isso o domínio tem que estar no ar antes de testar
-> cobrança.
-
-### Etapa 3 — Jurídico
-- [ ] `public/termos.html` e `public/privacidade.html` revisados por advogado
-- [ ] Declarar no texto: quais dados são guardados, por quanto tempo e por quê
-- [ ] Informar os terceiros: Meta (Facebook), InfinitePay, servidor de e-mail
-- [ ] Base legal para o tratamento de dados e canal do titular
-- [ ] Conferir as regras da Meta para publicação em grupos
-
-### Etapa 4 — Operação
-- [ ] Backup fora da máquina (o atual grava em `data/backups`, no mesmo disco)
-- [ ] Alerta se o serviço cair
-- [ ] Conferir uso de RAM: cada navegador é um Chromium headful
-
-### Etapa 5 — Teste final de aceitação (com produto no ar)
-Rodar **depois** das etapas acima, com o produto publicado e um usuário real.
-Este é o teste que vale a venda.
-
-- [ ] Conta de teste do Facebook em grupo de teste real
-- [ ] Conectar conta → criar campanha → publicar em 1 grupo de verdade
-- [ ] Conferir se o post apareceu, com texto e imagem corretos
-- [ ] Conferir se os 4 seletores batem com o DOM real do Facebook:
-  - `div[role="button"]::-p-text(Escreva algo...)`
-  - `div[role="textbox"]`
-  - `div[aria-label="Foto/vídeo"]` (com acento)
-  - `div[aria-label="Publicar"]`
-- [ ] Agendamento: deixar uma campanha para daqui a 10 minutos e confirmar
-- [ ] Compra real e confirmação de que o acesso foi liberado
-- [ ] Erro de seletores aparece como "O editor de publicação não apareceu neste
-      destino", que é genérico demais: guardar print da tela
-
-> Já validado: o navegador sobe, navega e digita
-> (`node scripts/testar-navegador.js` — Chrome 153). O executor chegou a abrir
-> o editor e digitar o texto numa cópia local do compositor. Falta só o DOM
-> real do Facebook.
-
-### Sobre o navegador
-
-O download do Chromium do puppeteer falhou nesta máquina (a pasta
-`win64-148.0.7778.97` ficou vazia). Por isso existe `CHROME_PATH`: aponte para
-um Chrome já instalado e o app usa ele.
+## 9. Verificação
 
 ```bash
-# Windows
-CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
-# Linux
-CHROME_PATH=/usr/bin/google-chrome
+npm run lint   # sintaxe de todos os .js e chamadas entre módulos
+npm test       # suíte de fumaça do servidor
+npm run preflight
+npm run backup -- listar
 ```
 
-`config.js` recusa o boot se o caminho não existir, em vez de falhar no meio
-de uma publicação. Depois de uma tentativa de download interrompida, apague a
-pasta antes de tentar de novo:
-
-```bash
-rm -rf ~/.cache/puppeteer/chrome/win64-148.0.7778.97
-npx puppeteer browsers install chrome
-```
-
----
-
-## 9. Decisões tomadas (não desfazer sem motivo novo)
-
-- **Arquitetura centralizada em um processo.** Decisão consciente, não
-  descuido. Documentada na regra 3.
-- **Chromium headful, não headless.** Headless é detectado pelo Facebook.
-  Exige Xvfb no servidor — já automatizado no `deploy-vps.sh`.
-- **Login manual na janela, sem senha.** A senha do Facebook nunca entra no
-  app. É requisito de privacidade e de segurança.
-- **NeDB.** Banco em arquivo. Simples, sem servidor extra. Limite: escala por
-  usuário, não por empresa. Não é hora de trocar.
-- **Estilo inline liberado na CSP.** A interface ajusta barras de progresso
-  por atributo `style`. Scripts continuam estritos, que é o que importa para
-  XSS.
-- **Executor abre o navegador por grupo de postagens.** É o comportamento
-  original, preservado de propósito. `facebook.js` cuida só da janela de
-  login e do ciclo de vida dos perfis.
-
----
+`preflight` sai com código 1 se algo impedir o serviço. É o filtro entre "rodei
+o deploy" e "descobri no meio da campanha que nada funciona".
 
 ## 10. Como seguir no próximo dia
 
 1. Leia este arquivo.
-2. `npm run lint && npm test` — confirme 69/69 antes de mudar qualquer coisa.
-3. Faça **uma** coisa da seção 8.
+2. `npm run lint && npm test` — confirme antes de mudar qualquer coisa.
+3. Faça **uma** coisa da seção 7.
 4. Atualize a seção 6 com o que mudou.
 5. `npm run lint && npm test` de novo.
 
