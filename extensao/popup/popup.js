@@ -83,6 +83,7 @@ $('form-login').addEventListener('submit', async evento => {
   try {
     await licenca.login($('login-email').value.trim(), $('login-senha').value);
     await atualizarTelaPrincipal();
+    await chrome.runtime.openOptionsPage();
   } catch (erro) {
     $('erro-login').textContent = erro.message || 'Falha no login.';
     $('erro-login').classList.remove('oculta');
@@ -114,6 +115,7 @@ $('form-cadastro').addEventListener('submit', async evento => {
       senha: $('cad-senha').value
     });
     await atualizarTelaPrincipal();
+    await chrome.runtime.openOptionsPage();
   } catch (erro) {
     $('erro-cadastro').textContent = erro.message || 'Falha ao criar conta.';
     $('erro-cadastro').classList.remove('oculta');
@@ -145,3 +147,5 @@ $('botao-campanhas').addEventListener('click', () => {
 
 // Ao abrir o popup, mostra o estado atual.
 atualizarTelaPrincipal();
+
+$('botao-feedback').addEventListener('click', () => { chrome.tabs.create({ url: `${CONFIG.API_BASE}/?origem=extensao#avaliar` }); });

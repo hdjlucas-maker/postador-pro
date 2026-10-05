@@ -71,7 +71,7 @@ function storageRemove(chaves) {
 async function carregarEstado() {
   const dados = await storageGet([
     'token', 'licenca', 'acesso', 'campanhas', 'historico', 'config',
-    'ultimaVerificacao', 'ultimaPublicacao', 'contadoresDia', 'consentimento'
+    'ultimaVerificacao', 'ultimaPublicacao', 'proximaPublicacaoEm', 'ultimoErroPublicacao', 'execucao', 'contadoresDia', 'consentimento'
   ]);
   return {
     token: dados.token || null,
@@ -82,6 +82,9 @@ async function carregarEstado() {
     config: dados.config || null,
     ultimaVerificacao: dados.ultimaVerificacao || 0,
     ultimaPublicacao: dados.ultimaPublicacao || 0,
+    proximaPublicacaoEm: dados.proximaPublicacaoEm || 0,
+    ultimoErroPublicacao: dados.ultimoErroPublicacao || '',
+    execucao: dados.execucao || { fase: 'parado', mensagem: 'Nenhuma execução em andamento.' },
     contadoresDia: dados.contadoresDia || { data: null, grupos: 0 },
     consentimento: dados.consentimento || false
   };
@@ -97,9 +100,16 @@ async function salvarEstado(estado) {
     config: estado.config,
     ultimaVerificacao: estado.ultimaVerificacao,
     ultimaPublicacao: estado.ultimaPublicacao,
+    proximaPublicacaoEm: estado.proximaPublicacaoEm || 0,
+    ultimoErroPublicacao: estado.ultimoErroPublicacao || '',
+    execucao: estado.execucao || { fase: 'parado', mensagem: 'Nenhuma execução em andamento.' },
     contadoresDia: estado.contadoresDia,
     consentimento: estado.consentimento
   });
+}
+
+function hojeChave() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 async function registrarPublicacao() {
@@ -114,14 +124,10 @@ async function registrarPublicacao() {
   return estado.contadoresDia.grupos;
 }
 
-function hojeChave() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export {
-  salvarImagem: imagemSalvar,
-  buscarImagem: imagemBuscar,
-  apagarImagem: imagemApagar,
+  imagemSalvar as salvarImagem,
+  imagemBuscar as buscarImagem,
+  imagemApagar as apagarImagem,
   carregarEstado,
   salvarEstado,
   registrarPublicacao,
