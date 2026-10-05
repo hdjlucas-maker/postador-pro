@@ -561,3 +561,23 @@ tr:last-child td {
     margin-left: 0;
   }
 }
+
+/* Identidade visual e download da extensão */
+.acoes-heroi { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+.acoes-heroi .botao { margin-top: 0; }
+.botao.secundario { background: #e7f3ff; color: #166fe5; }
+.imagem-heroi { display: block; width: min(100%, 760px); max-height: 360px; object-fit: cover; object-position: center; border-radius: 16px; margin: 26px auto 0; border: 1px solid #dcecff; box-shadow: 0 12px 32px rgba(24,119,242,.12); }
+@media (max-width: 640px) { .acoes-heroi { flex-direction: column; align-items: stretch; } .acoes-heroi .botao { text-align: center; } .imagem-heroi { max-height: 250px; } }
+
+.plano-nota { color: var(--texto-suave); font-size: 13px; margin: 12px 0; }
+.logo-site { width: 28px; height: 28px; border-radius: 7px; vertical-align: middle; }
+.entrega { min-height: 170px; }
+.entrega .botao { margin-top: 8px; }
+.limites-resumo { margin-top: 18px; border-left: 4px solid var(--azul); }
+.faq-lista { display: grid; gap: 10px; }
+.faq-lista details { background: #fff; border: 1px solid var(--borda-suave); border-radius: var(--raio); padding: 15px 18px; }
+.faq-lista summary { cursor: pointer; font-weight: 700; color: var(--texto); }
+.faq-lista details p { color: var(--texto-suave); margin: 10px 0 0; }
+
+.assinatura-rodape { margin-left: 14px; color: var(--texto-suave); }
+@media (max-width: 640px) { .assinatura-rodape { display: block; margin: 6px 0 0; } }

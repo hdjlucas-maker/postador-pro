@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" sizes="128x128" href="../icons/icon128.png">
+  <title>Postador Pro</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="cabecalho-marca">
+    <div class="marca-completa"><img src="../icons/icon48.png" alt="" class="logo-pequena"><div><h1>Postador Pro</h1><span class="subtitulo-marca">Divulgue com organização</span></div></div>
+    <span id="versao" class="versao">v1.0.0</span>
+  </header>
+
+  <div id="tela-login" class="tela oculta">
+    <div class="boas-vindas-mini"><img src="../assets/postador-hero.png" alt="Ilustração de divulgação organizada"><strong>Publique melhor, alcance mais grupos.</strong><span>Crie sua conta e comece sua avaliação gratuita.</span></div>
+    <p class="aviso">Faça login para usar o Postador Pro.</p>
+    <form id="form-login">
+      <input type="email" id="login-email" placeholder="E-mail" required>
+      <input type="password" id="login-senha" placeholder="Senha" required>
+      <button type="submit" class="botao">Entrar</button>
+    </form>
+    <p class="erro oculta" id="erro-login"></p>
+    <p class="link"><a href="#" id="link-cadastro">Criar conta</a></p>
+  </div>
+
+  <div id="tela-cadastro" class="tela oculta">
+    <div class="boas-vindas-mini"><img src="../assets/postador-hero.png" alt="Ilustração de divulgação organizada"><strong>Bem-vindo ao Postador Pro.</strong><span>Organize suas campanhas em poucos passos.</span></div>
+    <p class="aviso">Crie sua conta para começar a avaliação gratuita.</p>
+    <form id="form-cadastro">
+      <input type="text" id="cad-nome" placeholder="Seu nome" required>
+      <input type="email" id="cad-email" placeholder="E-mail" required>
+      <input type="password" id="cad-senha" placeholder="Senha (mín. 8 caracteres)" required minlength="8">
+      <label class="consentimento">
+        <input type="checkbox" id="cad-consentimento" required>
+        Li e aceito os <a href="#" id="link-termos">termos de uso</a>.
+      </label>
+      <button type="submit" class="botao">Criar conta</button>
+    </form>
+    <p class="erro oculta" id="erro-cadastro"></p>
+    <p class="link"><a href="#" id="link-voltar-login">Já tenho conta</a></p>
+  </div>
+
+  <div id="tela-principal" class="tela oculta">
+    <div id="cartao-licenca" class="cartao">
+      <div id="status-licenca">Verificando…</div>
+      <div id="detalhes-licenca" class="detalhes"></div>
+    </div>
+    <button id="botao-campanhas" class="botao">Gerenciar campanhas</button>
+    <button id="botao-assinar" class="botao secundario oculta">Assinar / Renovar</button>
+    <button id="botao-sair" class="botao-link">Sair</button>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

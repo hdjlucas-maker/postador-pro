@@ -179,4 +179,4 @@ function validarConfig(env) {
   return { problemas, avisos };
 }
 
-module.exports = { carregarConfig, config, baseUrl, validarConfig, num, bool, list };
+export { carregarConfig, config, baseUrl, validarConfig, num, bool, list };

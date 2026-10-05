@@ -143,7 +143,7 @@ async function gastarTempoDeDerivada(iteracoes = ITERACOES_PADRAO) {
   await derivar('senha-inexistente-que-nunca-existe', SALT_FANTASMA, iteracoes);
 }
 
-module.exports = {
+export {
   ITERACOES_PADRAO,
   enc,
   paraHex,
@@ -154,7 +154,7 @@ module.exports = {
   bytesAleatorios,
   derivar,
   sha256Hex,
-  hashToken: sha256Hex,
+  sha256Hex as hashToken,
   novoToken,
   hasharSenha,
   confereSenha,

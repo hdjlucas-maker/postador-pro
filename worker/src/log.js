@@ -49,4 +49,5 @@ const warn = (evento, extras) => log('warn', evento, extras);
 const erro = (evento, extras) => log('error', evento, extras);
 const debug = (evento, extras) => log('info', evento, extras);
 
-module.exports = { log, info, warn, erro, error: erro, debug, sanitizar };
+export { log, info, warn, erro, debug, sanitizar };
+export { erro as error };

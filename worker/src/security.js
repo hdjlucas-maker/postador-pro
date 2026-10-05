@@ -1,5 +1,11 @@
 'use strict';
 
+import * as crypto from './crypto.js';
+import { sha256Hex, novoToken } from './crypto.js';
+import * as configMod from './config.js';
+import * as db from './db.js';
+import * as log from './log.js';
+
 // Segurança de requisição: CORS, origem, CSRF, cookies e limite de taxa.
 //
 // ## O que mudou em relação ao servidor Express
@@ -13,10 +19,6 @@
 // - `timingSafeEqual` do Node foi reimplementado sobre Web Crypto em
 //   `crypto.igualBytes`.
 
-const crypto = require('./crypto');
-const configMod = require('./config');
-const db = require('./db');
-const log = require('./log');
 
 const CSP = [
   "default-src 'self'",
@@ -294,12 +296,12 @@ function limiteD1(nome, { max, janelaMs, chave } = {}) {
   };
 }
 
-module.exports = {
+export {
   CSP,
   METODOS_SEGUROS,
   RE_EXTENSAO,
-  hashToken: crypto.sha256Hex,
-  novoToken: crypto.novoToken,
+  sha256Hex as hashToken,
+  novoToken,
   idDaExtensao,
   origemExtensaoPermitida,
   temTokenBearer,

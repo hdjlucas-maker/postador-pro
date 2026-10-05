@@ -1,5 +1,13 @@
 'use strict';
 
+import { Hono } from 'hono';
+import * as configMod from '../config.js';
+import * as db from '../db.js';
+import * as auth from '../auth.js';
+import * as billing from '../billing.js';
+import * as log from '../log.js';
+import { naoEncontrado, paginacao } from './helpers.js';
+
 // Painel do administrador. Protegido por `exigirLogin` + `exigirAdmin`, e só
 // exibe o que a conta e o pagamento conhecem: nada de campanha ou conta do
 // Facebook, porque isso não existe no servidor.
@@ -7,13 +15,6 @@
 // Nenhuma rota recebe `env` por argumento: o app é montado uma vez no módulo e
 // o objeto de ambiente pertence à requisição, então cada handler lê `c.env`.
 
-const { Hono } = require('hono');
-const configMod = require('../config');
-const db = require('../db');
-const auth = require('../auth');
-const billing = require('../billing');
-const log = require('../log');
-const { naoEncontrado, paginacao } = require('./helpers');
 
 function resumo(env, user, estado) {
   return {
@@ -224,4 +225,4 @@ function criar() {
   return app;
 }
 
-module.exports = { criar };
+export { criar };

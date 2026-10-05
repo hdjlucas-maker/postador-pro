@@ -131,7 +131,8 @@ function set(campos) {
     const coluna = COLUNAS_USUARIO[chave];
     if (!coluna) throw new Error(`coluna de usuário desconhecida: ${chave}`);
     partes.push(`${coluna} = ?`);
-    valores.push(typeof valor === 'boolean' ? (valor ? 1 : 0) : valor);
+    // Datas (Date) viram ISO antes de ir ao banco; o D1 não aceita objeto Date.
+    valores.push(typeof valor === 'boolean' ? (valor ? 1 : 0) : iso(valor));
   }
   return { sql: partes.join(', '), valores };
 }
@@ -196,7 +197,10 @@ async function users_atualizar(env, userId, campos) {
 async function users_removerCampos(env, userId, campos) {
   const colunas = campos.map(chave => COLUNAS_USUARIO[chave]).filter(Boolean);
   if (!colunas.length) return;
-  const sql = colunas.map(coluna => `${coluna} = NULL`).join(', ');
+  // `login_falhas` é NOT NULL no schema: em vez de NULL, volta para 0.
+  const sql = colunas
+    .map(coluna => (coluna === 'login_falhas' ? `${coluna} = 0` : `${coluna} = NULL`))
+    .join(', ');
   await env.DB.prepare(`UPDATE users SET ${sql} WHERE id = ?`).bind(userId).run();
 }
 
@@ -751,7 +755,7 @@ async function manutencao(env, log) {
   return { sessoes, resets, limites };
 }
 
-module.exports = {
+export {
   AGORA,
   iso,
   data,

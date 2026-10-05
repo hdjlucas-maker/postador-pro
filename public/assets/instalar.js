@@ -6,7 +6,11 @@ async function carregarPlanos() {
   const alvo = document.getElementById('lista-planos');
 
   try {
-    const { planos, avaliacaoDias } = await chamar('/api/extensao/planos', undefined, 'GET');
+    const { planos, avaliacaoDias, limites } = await chamar('/api/extensao/planos', undefined, 'GET');
+    const pro = limites && limites.pro ? limites.pro : { gruposPorDia: 300, campanhasAtivas: 50, destinosPorCampanha: 100 };
+    const trial = limites && limites.trial ? limites.trial : { gruposPorDia: 10, campanhasAtivas: 3, destinosPorCampanha: 5 };
+    const limiteTrial = document.getElementById('limite-trial');
+    if (limiteTrial) limiteTrial.textContent = `${trial.gruposPorDia} grupos por dia`;
 
     document.getElementById('dias-avaliacao').textContent = avaliacaoDias;
 
@@ -21,11 +25,11 @@ async function carregarPlanos() {
         return `
           <div class="cartao plano${anual ? ' destaque' : ''}">
             <h3>${plano.nome}</h3>
-            <div class="preco">${moeda(plano.preco)} <span>/ ${plano.dias} dias</span></div>
+            <div class="preco">${moeda(plano.preco)} <span>/ ${anual ? 'ano' : 'mês'}</span></div>
             <ul>
-              <li>Até ${plano.dias} dias de acesso</li>
-              <li>Todos os grupos que você selecionar</li>
-              <li>Agendamento com ritmo controlado</li>
+              <li>Até ${pro.gruposPorDia} grupos por dia</li>
+              <li>Até ${pro.campanhasAtivas} campanhas ativas</li>
+              <li>Até ${pro.destinosPorCampanha} destinos por campanha</li>
               <li>Histórico completo no seu navegador</li>
               <li>Atualizações incluídas</li>
             </ul>

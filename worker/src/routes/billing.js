@@ -1,17 +1,18 @@
 'use strict';
 
+import { Hono } from 'hono';
+import * as configMod from '../config.js';
+import * as db from '../db.js';
+import * as auth from '../auth.js';
+import * as billing from '../billing.js';
+import * as security from '../security.js';
+import * as log from '../log.js';
+
 // Assinatura, checkout, reconciliação e o webhook da InfinitePay.
 //
 // Nenhuma rota recebe `env` por argumento: o app é montado uma vez no módulo e
 // o objeto de ambiente pertence à requisição, então cada handler lê `c.env`.
 
-const { Hono } = require('hono');
-const configMod = require('../config');
-const db = require('../db');
-const auth = require('../auth');
-const billing = require('../billing');
-const security = require('../security');
-const log = require('../log');
 
 // A chave do rate limit de checkout e reconciliação é a conta, não o IP: o
 // cliente pode mudar de rede no meio do pagamento, e o que precisa ser limitado
@@ -98,4 +99,4 @@ function criar() {
   return app;
 }
 
-module.exports = { criar };
+export { criar };

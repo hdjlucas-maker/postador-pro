@@ -1,5 +1,11 @@
 'use strict';
 
+import * as crypto from './crypto.js';
+import * as configMod from './config.js';
+import * as db from './db.js';
+import * as security from './security.js';
+import * as log from './log.js';
+
 // Autenticação: cadastro, login, sessões de cookie e tokens da extensão.
 //
 // A lógica é a mesma do servidor Express, com três trocas: o hash de senha vem
@@ -7,11 +13,6 @@
 // middlewares do Express viraram middlewares do Hono que escrevem em `c.user`
 // e `c.acesso`.
 
-const crypto = require('./crypto');
-const configMod = require('./config');
-const db = require('./db');
-const security = require('./security');
-const log = require('./log');
 
 const MAX_SESSOES_POR_CONTA = 5;
 
@@ -55,7 +56,7 @@ async function criarSessao(env, userId) {
   const token = crypto.novoToken(32);
 
   await db.sessions_inserir(env, {
-    tokenHash: crypto.sha256Hex(token),
+    tokenHash: await crypto.sha256Hex(token),
     userId,
     escopo: 'web',
     criadoEm: agora(),
@@ -84,7 +85,7 @@ async function criarTokenExtensao(env, userId) {
   const token = crypto.novoToken(32);
 
   await db.sessions_inserir(env, {
-    tokenHash: crypto.sha256Hex(token),
+    tokenHash: await crypto.sha256Hex(token),
     userId,
     escopo: 'extensao',
     criadoEm: agora(),
@@ -93,7 +94,7 @@ async function criarTokenExtensao(env, userId) {
 
   // Um token só por conta: pedir um novo derruba o antigo, o que impede que
   // tokens vazados continuem válidos ao mesmo tempo.
-  await db.sessions_removerExtensaoExceto(env, userId, crypto.sha256Hex(token));
+  await db.sessions_removerExtensaoExceto(env, userId, await crypto.sha256Hex(token));
 
   return token;
 }
@@ -101,7 +102,7 @@ async function criarTokenExtensao(env, userId) {
 async function sessaoPorToken(env, token) {
   if (!token) return null;
 
-  const sessao = await db.sessions_porTokenHash(env, crypto.sha256Hex(token));
+  const sessao = await db.sessions_porTokenHash(env, await crypto.sha256Hex(token));
   if (!sessao) return null;
 
   if (new Date(sessao.expiresAt) <= agora()) {
@@ -125,7 +126,7 @@ async function usuarioPorToken(env, token) {
 async function encerrarToken(c) {
   const token = security.extrairBearer(c);
   if (!token) return;
-  await db.sessions_removerPorTokenHash(c.env, crypto.sha256Hex(token));
+  await db.sessions_removerPorTokenHash(c.env, await crypto.sha256Hex(token));
 }
 
 function aplicarSessao(c, token) {
@@ -355,7 +356,7 @@ async function trocarSenha(env, user, senhaAtual, novaSenha) {
   log.info('senha_trocada', { userId: user._id });
 }
 
-module.exports = {
+export {
   agora,
   addDays,
   addMinutos,

@@ -1,19 +1,20 @@
 'use strict';
 
+import { Hono } from 'hono';
+import * as crypto from '../crypto.js';
+import * as configMod from '../config.js';
+import * as db from '../db.js';
+import * as auth from '../auth.js';
+import * as security from '../security.js';
+import * as email from '../email.js';
+import * as log from '../log.js';
+import { texto } from './helpers.js';
+
 // Rotas de conta: cadastro, login, perfil, recuperação de senha e LGPD.
 //
 // Nenhuma rota recebe `env` por argumento. O app é montado uma vez no módulo e
 // o objeto de ambiente pertence à requisição, então cada handler lê `c.env`.
 
-const { Hono } = require('hono');
-const crypto = require('../crypto');
-const configMod = require('../config');
-const db = require('../db');
-const auth = require('../auth');
-const security = require('../security');
-const email = require('../email');
-const log = require('../log');
-const { texto } = require('./helpers');
 
 function perfilPublico(env, user, estado) {
   return {
@@ -83,7 +84,7 @@ function criar() {
     const env = c.env;
     const cfg = configMod.config(env);
     const token = c.req.cookie(cfg.SESSION_COOKIE);
-    if (token) await db.sessions_removerPorTokenHash(env, crypto.sha256Hex(token));
+    if (token) await db.sessions_removerPorTokenHash(env, await crypto.sha256Hex(token));
     auth.encerrarSessao(c);
     return c.json({ ok: true });
   });
@@ -129,7 +130,7 @@ function criar() {
 
     const token = crypto.novoToken(24);
     await db.resets_inserir(env, {
-      tokenHash: crypto.sha256Hex(token),
+      tokenHash: await crypto.sha256Hex(token),
       userId: user._id,
       criadoEm: new Date(),
       expiraEm: new Date(Date.now() + cfg.RESET_TOKEN_MINUTES * 60000),
@@ -154,7 +155,7 @@ function criar() {
     const token = String(body.token || '');
     if (!token) throw Object.assign(new Error('Token inválido.'), { status: 400 });
 
-    const registro = await db.resets_porTokenHash(env, crypto.sha256Hex(token));
+    const registro = await db.resets_porTokenHash(env, await crypto.sha256Hex(token));
     if (!registro || registro.usadoEm || new Date(registro.expiraEm) <= new Date()) {
       throw Object.assign(new Error('Link expirado ou já utilizado. Solicite um novo.'), { status: 400 });
     }
@@ -225,4 +226,4 @@ function criar() {
   return app;
 }
 
-module.exports = { criar, perfilPublico };
+export { criar, perfilPublico };

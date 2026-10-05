@@ -1,5 +1,12 @@
 'use strict';
 
+import * as crypto from './crypto.js';
+import * as configMod from './config.js';
+import * as db from './db.js';
+import * as auth from './auth.js';
+import * as log from './log.js';
+import * as email from './email.js';
+
 // Cobrança InfinitePay.
 //
 // A regra de segurança continua a mesma do servidor: o corpo do webhook não é
@@ -9,12 +16,6 @@
 // acesso, porque o valor confere contra a planilha de preços do servidor e
 // não contra o corpo da requisição.
 
-const crypto = require('./crypto');
-const configMod = require('./config');
-const db = require('./db');
-const auth = require('./auth');
-const log = require('./log');
-const email = require('./email');
 
 function precoEmCentavos(valor) {
   return Math.round(Number(valor) * 100);
@@ -339,7 +340,7 @@ async function concessaoManual(env, { user, dias, plano, motivo, admin }) {
   return dataExpiracao;
 }
 
-module.exports = {
+export {
   precoEmCentavos,
   criarCheckout,
   webhook,

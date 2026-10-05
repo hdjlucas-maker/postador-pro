@@ -26,20 +26,25 @@
 // rotas de página (`/`, `/redefinir`, `/admin`) não passam por aqui — são
 // arquivos. Só `/api/*` e o webhook chegam neste módulo.
 
-const { Hono } = require('hono');
-const configMod = require('./config');
-const security = require('./security');
-const auth = require('./auth');
-const db = require('./db');
-const log = require('./log');
+import { Hono } from 'hono';
+import * as configMod from './config.js';
+import * as security from './security.js';
+import * as auth from './auth.js';
+import * as db from './db.js';
+import * as log from './log.js';
 
 const VERSAO = '1.0.0';
 
+import * as rotasAuth from './routes/auth.js';
+import * as rotasBilling from './routes/billing.js';
+import * as rotasExtensao from './routes/extensao.js';
+import * as rotasAdmin from './routes/admin.js';
+
 const rotas = {
-  auth: require('./routes/auth'),
-  billing: require('./routes/billing'),
-  extensao: require('./routes/extensao'),
-  admin: require('./routes/admin')
+  auth: rotasAuth,
+  billing: rotasBilling,
+  extensao: rotasExtensao,
+  admin: rotasAdmin
 };
 
 function cabecalhosSeguranca() {
@@ -201,9 +206,7 @@ async function scheduledHandler(event, env, ctx) {
   );
 }
 
-module.exports = {
+export default {
   fetch: fetchHandler,
-  scheduled: scheduledHandler,
-  app,
-  VERSAO
+  scheduled: scheduledHandler
 };

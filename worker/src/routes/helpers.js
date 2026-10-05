@@ -34,4 +34,4 @@ function paginacao(query) {
   return { page, perPage, skip: (page - 1) * perPage };
 }
 
-module.exports = { erroDeValidacao, naoEncontrado, texto, paginacao };
+export { erroDeValidacao, naoEncontrado, texto, paginacao };

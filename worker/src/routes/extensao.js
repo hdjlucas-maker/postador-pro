@@ -1,5 +1,13 @@
 'use strict';
 
+import { Hono } from 'hono';
+import * as configMod from '../config.js';
+import * as auth from '../auth.js';
+import * as security from '../security.js';
+import * as billing from '../billing.js';
+import * as log from '../log.js';
+import * as db from '../db.js';
+
 // Rotas consumidas pela extensão. Aqui não entra campanha, imagem, destino nem
 // histórico: tudo isso vive no `chrome.storage` e no IndexedDB do navegador do
 // cliente. O servidor responde três coisas — quem é o usuário, até quando a
@@ -8,13 +16,6 @@
 // Nenhuma rota recebe `env` por argumento: o app é montado uma vez no módulo e
 // o objeto de ambiente pertence à requisição, então cada handler lê `c.env`.
 
-const { Hono } = require('hono');
-const configMod = require('../config');
-const auth = require('../auth');
-const security = require('../security');
-const billing = require('../billing');
-const log = require('../log');
-const db = require('../db');
 
 function resumoLicenca(env, user) {
   const limites = auth.limitesDoPlano(env, user);
@@ -135,4 +136,4 @@ function criar() {
   return app;
 }
 
-module.exports = { criar, resumoLicenca };
+export { criar, resumoLicenca };

@@ -10,7 +10,7 @@
   // O endpoint público sai aqui:
   //   https://postador-pro-api.<seu-subdominio>.workers.dev
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "postador-pro-api",
+  "name": "postador",
   "main": "src/index.js",
   // Data mais recente suportada pelo runtime instalado. Ficar na frente dela faz
   // o Wrangler voltar para a última compatível e avisar; subir o valor junto com
@@ -78,8 +78,8 @@
     "IS_PROD": "1",
     // Preenchido por `npm run setup`. A tag da InfinitePay já é conhecida.
     "INFINITEPAY_HANDLE": "servicoslucas",
-    "ADMIN_EMAILS": "",
-    "EXTENSAO_IDS": "",
+    "ADMIN_EMAILS": "hdjlucas@gmail.com",
+    "EXTENSAO_IDS": "aaegnkekaabiomfkpmpbhodliomgkdna",
     "EMAIL_FROM": "",
     "TRIAL_DAYS": "7",
     "SESSION_DAYS": "30",

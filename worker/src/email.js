@@ -1,5 +1,8 @@
 'use strict';
 
+import * as configMod from './config.js';
+import * as log from './log.js';
+
 // E-mail transacional pela binding `EMAIL` do Cloudflare Email Service.
 //
 // ## O que mudou em relação ao servidor
@@ -22,8 +25,6 @@
 // sair por e-mail. Para uma base de clientes pequena isso é aceitável por um
 // tempo, e o administrador pode redefinir a senha pelo painel.
 
-const configMod = require('./config');
-const log = require('./log');
 
 function remetente(env, nome = 'Postador Pro') {
   const cfg = configMod.config(env);
@@ -129,4 +130,4 @@ async function avisarPagamento(env, { email, nome, plano, expiraEm }) {
   });
 }
 
-module.exports = { enviar, enviarRecuperacao, avisarPagamento };
+export { enviar, enviarRecuperacao, avisarPagamento };
