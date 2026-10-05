@@ -1,3 +1,309 @@
+ESSAS SAO INFORMAÇOES ATUAIS E QUERO QUE A IA LEIA COM ATENÇAO 
+
+# Prompt para concluir o Postador Pro
+
+VocÃª Ã© um engenheiro sÃªnior especializado em extensÃµes Chrome Manifest V3, automaÃ§Ã£o segura de interfaces React, filas de tarefas, UX e confiabilidade.
+
+Preciso concluir profissionalmente uma extensÃ£o chamada **Postador Pro**, que publica campanhas autorizadas em grupos do Facebook. O projeto jÃ¡ foi parcialmente construÃ­do, mas precisa de auditoria tÃ©cnica e de uma implementaÃ§Ã£o confiÃ¡vel, sem travamentos, publicaÃ§Ãµes em locais errados ou erros silenciosos.
+
+## Objetivo principal
+
+Concluir uma ferramenta profissional para criaÃ§Ã£o e execuÃ§Ã£o de campanhas em grupos do Facebook, com:
+
+1. publicaÃ§Ã£o somente como **nova postagem no grupo**;
+2. nunca comentar em publicaÃ§Ãµes de outras pessoas;
+3. nunca responder comentÃ¡rios;
+4. nunca curtir, reagir ou interagir artificialmente;
+5. fila estÃ¡vel e sem execuÃ§Ãµes duplicadas;
+6. delay configurÃ¡vel e aleatÃ³rio;
+7. limite diÃ¡rio seguro;
+8. variaÃ§Ãµes de conteÃºdo com Spintax;
+9. status de execuÃ§Ã£o claro;
+10. erros visÃ­veis e diagnosticÃ¡veis;
+11. operaÃ§Ã£o em segundo plano, sem bloquear o desktop;
+12. comportamento previsÃ­vel e fÃ¡cil de usar.
+
+A prioridade Ã© **confiabilidade e seguranÃ§a**, nÃ£o quantidade de recursos.
+
+## Problema crÃ­tico: nova postagem, nunca comentÃ¡rio
+
+A ferramenta recebe uma URL de grupo, por exemplo:
+
+```text
+https://www.facebook.com/groups/123456789
+```
+
+Ela deve:
+
+1. validar que a URL Ã© realmente de um grupo;
+2. abrir o grupo;
+3. localizar o botÃ£o ou Ã¡rea de **nova publicaÃ§Ã£o**;
+4. abrir o compositor de nova postagem;
+5. localizar o editor dentro desse compositor;
+6. inserir o texto;
+7. anexar imagem, se houver;
+8. publicar somente dentro do compositor de nova postagem.
+
+Se nÃ£o for possÃ­vel confirmar o compositor correto, nÃ£o publique nada e mostre:
+
+```text
+NÃ£o foi possÃ­vel confirmar o compositor de nova postagem. Nenhum comentÃ¡rio foi enviado.
+```
+
+Nunca usar como fallback um seletor global como:
+
+```javascript
+document.querySelector('[contenteditable="true"]')
+```
+
+Campos dentro de `<article>` devem ser rejeitados, exceto quando estiverem dentro de um diÃ¡logo comprovadamente aberto para nova postagem. Os elementos de texto, imagem e publicaÃ§Ã£o devem estar dentro de um contÃªiner seguro, como `[role="dialog"]`.
+
+## SeguranÃ§a e Ã©tica
+
+NÃ£o implementar:
+
+- bypass de CAPTCHA;
+- falsificaÃ§Ã£o de navegador;
+- evasÃ£o de bloqueios ou detecÃ§Ã£o;
+- alteraÃ§Ã£o de fingerprint;
+- curtidas, comentÃ¡rios ou reaÃ§Ãµes automÃ¡ticas;
+- spam agressivo;
+- publicaÃ§Ã£o sem permissÃ£o.
+
+Ã‰ aceitÃ¡vel utilizar uma aba inativa ou janela em segundo plano para nÃ£o interromper o usuÃ¡rio, mas o Facebook ainda precisa estar carregado e conectado em algum contexto do navegador.
+
+A ferramenta deve publicar apenas onde o usuÃ¡rio tem permissÃ£o, respeitar as regras de cada grupo e parar se o Facebook exibir qualquer aviso.
+
+## Delay dinÃ¢mico obrigatÃ³rio
+
+O delay nÃ£o pode ser fixo. A interface deve permitir configurar:
+
+```text
+mÃ­nimo em segundos
+mÃ¡ximo em segundos
+```
+
+ConfiguraÃ§Ã£o padrÃ£o:
+
+```text
+mÃ­nimo: 600 segundos
+mÃ¡ximo: 1200 segundos
+```
+
+Isso representa um intervalo aleatÃ³rio entre 10 e 20 minutos:
+
+```javascript
+const atraso = Math.floor(Math.random() * (maximo - minimo + 1)) + minimo;
+```
+
+Requisitos:
+
+- nunca publicar duas postagens no mesmo minuto;
+- nunca ignorar o delay;
+- a primeira postagem pode comeÃ§ar imediatamente quando o usuÃ¡rio clicar em â€œPostar agoraâ€;
+- todas as seguintes devem respeitar o intervalo;
+- exibir o prÃ³ximo horÃ¡rio no status;
+- impedir duas execuÃ§Ãµes concorrentes da mesma campanha;
+- ao reabrir o navegador, continuar sem duplicar postagens.
+
+## Limites diÃ¡rios
+
+Plano Lite gratuito:
+
+```text
+mÃ¡ximo de 5 grupos por dia
+```
+
+Plano Pro:
+
+```text
+mÃ¡ximo recomendado de 10 grupos por dia
+```
+
+O limite deve ser validado no servidor e na extensÃ£o. Ao atingir o limite:
+
+```text
+Limite diÃ¡rio atingido. A fila foi pausada para proteger sua conta.
+```
+
+O contador deve sobreviver ao fechamento do navegador e reiniciar somente na mudanÃ§a real do dia.
+
+## Spintax e rotaÃ§Ã£o de conteÃºdo
+
+Aceitar mensagens como:
+
+```text
+{Confira essa oportunidade|Olha que oportunidade incrÃ­vel|Veja isso}
+```
+
+A cada postagem, selecionar uma alternativa aleatÃ³ria. Suportar:
+
+- vÃ¡rios blocos Spintax na mesma mensagem;
+- acentos e emojis;
+- prevenÃ§Ã£o de repetiÃ§Ã£o imediata quando houver alternativas;
+- registro do texto efetivamente usado;
+- aviso amigÃ¡vel para chaves malformadas;
+- texto fixo sem fingir que possui variaÃ§Ãµes.
+
+NÃ£o alterar o sentido da mensagem de forma enganosa.
+
+## Avisos do Facebook
+
+Antes e depois de publicar, verificar sinais de conta suspensa, bloqueio temporÃ¡rio, limitaÃ§Ã£o de frequÃªncia, atividade restrita ou aviso de spam.
+
+Ao detectar aviso:
+
+1. nÃ£o publicar;
+2. pausar toda a fila;
+3. salvar o motivo;
+4. mostrar:
+
+```text
+O Facebook exibiu um aviso. A fila foi pausada para proteger sua conta.
+```
+
+5. nÃ£o tentar contornar o aviso automaticamente.
+
+## Status de execuÃ§Ã£o
+
+Criar um painel dentro da extensÃ£o com estados como:
+
+```text
+Parado
+Preparando
+Abrindo grupo
+Compositor encontrado
+Inserindo mensagem
+Anexando imagem
+Publicando
+Aguardando intervalo
+ConcluÃ­da
+Pausada por aviso
+Erro
+```
+
+O painel deve exibir campanha, grupo atual, quantidade concluÃ­da, quantidade restante, Ãºltimo resultado, prÃ³ximo horÃ¡rio e erro detalhado.
+
+O usuÃ¡rio deve acompanhar somente o status da ferramenta. A tela principal nÃ£o pode ser tomada, redirecionada ou travada.
+
+## Tratamento de erros
+
+Nenhum erro pode ser engolido silenciosamente. Salvar e exibir o erro, o grupo afetado e se a fila foi pausada.
+
+Exemplos:
+
+```text
+NÃ£o foi possÃ­vel abrir o grupo.
+```
+
+```text
+O Facebook nÃ£o exibiu o compositor de nova postagem. Nenhum comentÃ¡rio foi enviado.
+```
+
+```text
+O botÃ£o Publicar nÃ£o foi confirmado. A fila foi interrompida por seguranÃ§a.
+```
+
+NÃ£o mostrar apenas â€œErro desconhecidoâ€ quando houver uma causa identificÃ¡vel.
+
+## Campanhas
+
+Cada campanha deve permitir:
+
+- criar;
+- editar;
+- excluir;
+- reutilizar;
+- publicar agora;
+- agendar;
+- pausar;
+- retomar somente apÃ³s confirmaÃ§Ã£o do usuÃ¡rio;
+- visualizar status, publicados e falhas.
+
+Reutilizar uma campanha deve criar um novo identificador, preservando grupos, imagem, texto/Spintax e delay, sem misturar histÃ³ricos.
+
+## ProteÃ§Ã£o contra duplicaÃ§Ã£o
+
+Impedir:
+
+- duas execuÃ§Ãµes simultÃ¢neas;
+- postagem duplicada no mesmo grupo;
+- clique duplo em â€œPostar agoraâ€;
+- reprocessamento apÃ³s timeout sem verificar o estado;
+- sobrescrita de contadores com estado antigo.
+
+## Testes obrigatÃ³rios
+
+Criar testes para:
+
+### Spintax
+
+- uma alternativa;
+- vÃ¡rias alternativas;
+- mÃºltiplos blocos;
+- emojis e acentos;
+- chaves incompletas;
+- prevenÃ§Ã£o de repetiÃ§Ã£o imediata.
+
+### Delay
+
+- mÃ­nimo e mÃ¡ximo;
+- sorteio aleatÃ³rio;
+- prÃ³ximo horÃ¡rio;
+- fechamento e reabertura do navegador;
+- clique duplo em â€œPostar agoraâ€.
+
+### SeguranÃ§a do DOM
+
+Simular HTML com campo de comentÃ¡rio dentro de `<article>`, compositor dentro de `[role="dialog"]`, vÃ¡rios botÃµes â€œPublicarâ€ e vÃ¡rios `contenteditable`. O cÃ³digo deve selecionar somente o compositor correto.
+
+### Limites e erros
+
+Testar 5 grupos no Lite, tentativa do sexto, 10 grupos no Pro, mudanÃ§a de dia, grupo invÃ¡lido, usuÃ¡rio desconectado, compositor ausente, botÃ£o desabilitado, aviso do Facebook e aba fechada.
+
+## CritÃ©rios de aceitaÃ§Ã£o
+
+A implementaÃ§Ã£o somente estÃ¡ concluÃ­da quando:
+
+- uma URL de grupo gera somente uma nova postagem;
+- nenhum comentÃ¡rio Ã© criado;
+- nenhum post de outra pessoa Ã© alterado;
+- o delay aleatÃ³rio de 600 a 1200 segundos Ã© respeitado;
+- o Spintax gera variaÃ§Ãµes vÃ¡lidas;
+- o Lite bloqueia no quinto grupo;
+- a fila pausa diante de aviso;
+- o usuÃ¡rio vÃª somente o status da extensÃ£o;
+- o desktop nÃ£o Ã© tomado pela automaÃ§Ã£o;
+- erros aparecem no painel;
+- nÃ£o existem erros silenciosos;
+- os testes passam;
+- o fluxo Ã© validado primeiro com um Ãºnico grupo;
+- a documentaÃ§Ã£o de instalaÃ§Ã£o estÃ¡ atualizada.
+
+## Ordem de trabalho
+
+1. auditar o cÃ³digo atual;
+2. listar problemas encontrados;
+3. corrigir o fluxo de uma Ãºnica postagem;
+4. criar testes do DOM;
+5. validar que comentÃ¡rios nunca sÃ£o selecionados;
+6. implementar a fila;
+7. implementar delay aleatÃ³rio;
+8. implementar Spintax;
+9. implementar limites;
+10. implementar status;
+11. executar testes;
+12. gerar nova versÃ£o somente apÃ³s evidÃªncia;
+13. informar exatamente o que foi testado;
+14. declarar limitaÃ§Ãµes quando for necessÃ¡rio testar com uma conta real do Facebook.
+
+NÃ£o crie versÃµes apenas para parecer que houve progresso. Cada versÃ£o deve corrigir um problema verificÃ¡vel.
+
+
+
+
+
+ESSAS INFORMAÇOES AQUI SAO ANTIGAS ALGUMAS SAO VALIDAS E OUTRAS MUDARAM 
 # DIRETRIZES — Postador Pro
 
 > Leia antes de tocar em qualquer coisa. Se algo aqui estiver errado, corrija o
