@@ -1,43 +1,25 @@
 'use strict';
 
-import { CONFIG, cadenciaDigito as cadenciaTexto } from '../lib/config.js';
+import { CONFIG, cadenciaDigito as cadenciaTexto, delayEntrePosts } from '../lib/config.js';
 import * as armazenamento from '../lib/armazenamento.js';
 import * as licenca from '../lib/licenca.js';
 import * as campanhas from '../lib/campanhas.js';
 
-// Service worker: orquestra a fila de publicação, os alarmes de agendamento e
-// a verificação periódica da licença. No Manifest V3 o Chrome encerra este
-// worker após inatividade; os alarmes só disparam com o navegador ligado.
-
-
-
-// --- alarmes ---
-
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   chrome.alarms.create('verificar-licenca', { periodInMinutes: CONFIG.VERIFICAR_LICENCA_MINUTOS });
   chrome.alarms.create('processar-fila', { periodInMinutes: 1 });
+  await restaurarAlarmes();
 });
 
 chrome.alarms.onAlarm.addListener(async alarme => {
-  if (alarme.name === 'verificar-licenca') {
-    await verificarLicencaPeriodicamente();
-  } else if (alarme.name === 'processar-fila') {
-    await processarFila();
-  } else if (alarme.name && alarme.name.startsWith('campanha-')) {
-    // Chegou a hora de uma campanha agendada.
-    await processarFila();
-  }
-});
+  if (alarme.name === 'verificar-licenca') return verificarLicencaPeriodicamente();
+  if (alarme.name === 'processar-fila' || (alarme.name && alarme.name.startsWith('campanha-'))) return processarFila();
+}
+);
 
 async function verificarLicencaPeriodicamente() {
-  try {
-    await licenca.verificarLicenca();
-  } catch (_) {
-    // Sem rede: a carência offline decide.
-  }
+  try { await licenca.verificarLicenca(); } catch (_) {}
 }
-
-// --- fila de publicação ---
 
 let processando = false;
 
@@ -46,38 +28,73 @@ async function processarFila() {
   processando = true;
   try {
     const estado = await armazenamento.carregarEstado();
-
-    // Sem acesso, não publica.
+    migrarCampanhasAntigas(estado);
     const acesso = await licenca.verificarLicenca();
     if (!acesso.permitido) return;
 
-    // Limite diário de grupos.
-    const hoje = armazenamento.hojeChave();
-    if (estado.contadoresDia && estado.contadoresDia.data === hoje) {
-      const limite = estado.licenca && estado.licenca.limites ? estado.licenca.limites.gruposPorDia : 10;
-      if (estado.contadoresDia.grupos >= limite) return;
-    }
-
-    // Encontra a próxima campanha com destino pendente.
     const campanha = proximaCampanha(estado.campanhas);
     if (!campanha) return;
+    if (campanha.status === 'pausada') return;
 
-    // Agendamento: só publica se chegou a hora.
-    if (campanha.agendadoPara && new Date(campanha.agendadoPara).getTime() > Date.now()) return;
+    const agora = Date.now();
+    if (campanha.agendadoPara && new Date(campanha.agendadoPara).getTime() > agora) {
+      campanha.proximaPublicacaoEm = new Date(campanha.agendadoPara).getTime();
+      await armazenamento.salvarEstado(estado);
+      return;
+    }
+    if (campanha.proximaPublicacaoEm && campanha.proximaPublicacaoEm > agora) return;
 
-    const destino = campanha.destinos[0];
-    const resultado = await publicarEmDestino(campanha, destino);
+    const limite = estado.licenca?.limites?.gruposPorDia ?? 10;
+    const hoje = armazenamento.hojeChave();
+    if (estado.contadoresDia?.data === hoje && estado.contadoresDia.grupos >= limite) return;
+
+    const item = campanha.fila?.find(d => d.status === 'pendente');
+    if (!item) {
+      finalizarSeNecessario(campanha);
+      await armazenamento.salvarEstado(estado);
+      return;
+    }
+
+    item.status = 'preparando';
+    item.iniciadoEm = Date.now();
+    campanha.atual = item.destino;
+    await armazenamento.salvarEstado(estado);
+
+    item.status = 'publicando';
+    await armazenamento.salvarEstado(estado);
+    const resultado = await publicarEmDestino(campanha, item.destino);
 
     if (resultado.ok) {
+      item.status = 'publicado';
+      item.confirmadoEm = Date.now();
+      item.erro = null;
+      campanha.publicado = (campanha.publicado || 0) + 1;
       await armazenamento.registrarPublicacao();
-      await campanhas.registrarResultado(campanha.id, destino, 'publicado');
-      campanha.destinos.shift();
-      if (!campanha.destinos.length) campanha.status = 'concluida';
-      await armazenamento.salvarEstado(estado);
+      await campanhas.registrarResultado(campanha.id, item.destino, 'publicado');
+    } else if (resultado.naoConfirmado) {
+      item.status = 'nao_confirmado';
+      item.erro = resultado.erro || 'O botão Publicar não pôde ser confirmado.';
+      item.finalizadoEm = Date.now();
+      campanha.naoConfirmado = (campanha.naoConfirmado || 0) + 1;
+      await campanhas.registrarResultado(campanha.id, item.destino, 'nao_confirmado', item.erro);
     } else {
-      await campanhas.registrarResultado(campanha.id, destino, 'falhou');
-      campanha.destinos.shift();
-      if (!campanha.destinos.length) campanha.status = 'concluida';
+      item.status = 'falhou';
+      item.erro = resultado.erro || 'Falha na publicação.';
+      item.finalizadoEm = Date.now();
+      campanha.falhou = (campanha.falhou || 0) + 1;
+      await campanhas.registrarResultado(campanha.id, item.destino, 'falhou', item.erro);
+    }
+
+    campanha.atual = null;
+    campanha.agendadoPara = null;
+    finalizarSeNecessario(campanha);
+
+    if (campanha.status === 'ativa' && campanha.fila.some(d => d.status === 'pendente')) {
+      campanha.proximaPublicacaoEm = Date.now() + delayEntrePosts();
+      await armazenamento.salvarEstado(estado);
+      await agendarProxima(campanha);
+    } else {
+      campanha.proximaPublicacaoEm = null;
       await armazenamento.salvarEstado(estado);
     }
   } finally {
@@ -85,30 +102,32 @@ async function processarFila() {
   }
 }
 
-function proximaCampanha(campanhas) {
-  return campanhas
-    .filter(c => c.status === 'ativa' && c.destinos && c.destinos.length)
-    .sort((a, b) => (a.agendadoPara || 0) - (b.agendadoPara || 0))[0] || null;
+function proximaCampanha(lista) {
+  return (lista || [])
+    .filter(c => c.status === 'ativa' && Array.isArray(c.fila) && c.fila.some(d => d.status === 'pendente'))
+    .sort((a, b) => (a.proximaPublicacaoEm || a.agendadoPara || 0) - (b.proximaPublicacaoEm || b.agendadoPara || 0))[0] || null;
+}
+
+function finalizarSeNecessario(campanha) {
+  if (!campanha.fila?.some(d => d.status === 'pendente' || d.status === 'preparando' || d.status === 'publicando')) {
+    campanha.status = 'concluida';
+  }
+}
+
+async function agendarProxima(campanha) {
+  if (!campanha.proximaPublicacaoEm) return;
+  await chrome.alarms.create(`campanha-${campanha.id}`, { when: campanha.proximaPublicacaoEm });
 }
 
 async function publicarEmDestino(campanha, destino) {
-  // Abre (ou reutiliza) uma aba do Facebook.
   const aba = await abrirAbaFacebook();
   if (!aba) return { ok: false, erro: 'Não consegui abrir o Facebook.' };
 
-  // Injeta o content script se ainda não estiver.
-  try {
-    await chrome.scripting.executeScript({ target: { tabId: aba.id }, files: ['content/facebook.js'] });
-  } catch (_) {
-    // Já injetado.
-  }
+  try { await chrome.scripting.executeScript({ target: { tabId: aba.id }, files: ['content/facebook.js'] }); } catch (_) {}
 
-  // Navega para o grupo.
-  const url = montarUrlGrupo(destino);
-  await chrome.tabs.update(aba.id, { url });
+  await chrome.tabs.update(aba.id, { url: montarUrlGrupo(destino) });
   await esperar(6000);
 
-  // Busca a imagem no IndexedDB.
   let imagemDados = null;
   let imagemTipo = null;
   if (campanha.imagemId) {
@@ -119,18 +138,10 @@ async function publicarEmDestino(campanha, destino) {
     }
   }
 
-  const texto = campanha.textos[0];
-
-  // ArrayBuffer atravessa o messaging de extensão de forma confiável; Blob não.
-  const resposta = await chrome.tabs.sendMessage(aba.id, {
-    tipo: 'publicar',
-    texto,
-    imagemDados,
-    imagemTipo,
-    cadencia: cadenciaTexto
-  }).catch(() => ({ ok: false, erro: 'Não consegui falar com a página do Facebook.' }));
-
-  return resposta;
+  const texto = campanha.textos?.[0] || '';
+  return chrome.tabs.sendMessage(aba.id, {
+    tipo: 'publicar', texto, imagemDados, imagemTipo, cadencia: cadenciaTexto
+  }).catch(() => ({ ok: false, naoConfirmado: true, erro: 'Não consegui falar com a página do Facebook.' }));
 }
 
 async function abrirAbaFacebook() {
@@ -142,38 +153,66 @@ async function abrirAbaFacebook() {
 function montarUrlGrupo(destino) {
   const limpo = String(destino).trim();
   if (/^https?:\/\//.test(limpo)) return limpo;
-  // Aceita nome de grupo ou ID.
   return `https://www.facebook.com/groups/${limpo}`;
 }
 
-function esperar(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function esperar(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+async function restaurarAlarmes() {
+  const estado = await armazenamento.carregarEstado();
+  migrarCampanhasAntigas(estado);
+  await armazenamento.salvarEstado(estado);
+  for (const campanha of estado.campanhas || []) {
+    if (campanha.status === 'ativa' && campanha.proximaPublicacaoEm) await agendarProxima(campanha);
+    if (campanha.status === 'ativa' && campanha.agendadoPara) await agendarProxima({ ...campanha, proximaPublicacaoEm: new Date(campanha.agendadoPara).getTime() });
+  }
 }
 
-// Mensagens do popup/options.
+chrome.runtime.onStartup?.addListener(restaurarAlarmes);
+
 chrome.runtime.onMessage.addListener((mensagem, _sender, enviarResposta) => {
-  if (mensagem && mensagem.tipo === 'processar-agora') {
+  if (mensagem?.tipo === 'processar-agora') {
     processarFila().then(() => enviarResposta({ ok: true })).catch(erro => enviarResposta({ ok: false, erro: String(erro) }));
     return true;
   }
-  if (mensagem && mensagem.tipo === 'agendar-campanha') {
-    agendarCampanha(mensagem.campanhaId)
-      .then(() => enviarResposta({ ok: true }))
-      .catch(erro => enviarResposta({ ok: false, erro: String(erro) }));
+  if (mensagem?.tipo === 'iniciar-campanha') {
+    iniciarCampanha(mensagem.campanhaId).then(() => enviarResposta({ ok: true })).catch(erro => enviarResposta({ ok: false, erro: String(erro) }));
+    return true;
+  }
+  if (mensagem?.tipo === 'pausar-campanha') {
+    alterarPausa(mensagem.campanhaId, true).then(() => enviarResposta({ ok: true })).catch(erro => enviarResposta({ ok: false, erro: String(erro) }));
+    return true;
+  }
+  if (mensagem?.tipo === 'retomar-campanha') {
+    alterarPausa(mensagem.campanhaId, false).then(() => enviarResposta({ ok: true })).catch(erro => enviarResposta({ ok: false, erro: String(erro) }));
     return true;
   }
   return false;
 });
 
-async function agendarCampanha(campanhaId) {
+async function iniciarCampanha(id) {
   const estado = await armazenamento.carregarEstado();
-  const campanha = estado.campanhas.find(c => c.id === campanhaId);
-  if (!campanha || !campanha.agendadoPara) return;
-
-  const quando = new Date(campanha.agendadoPara).getTime();
-  if (quando <= Date.now()) return;
-
-  // O alarme de campanha dispara uma vez na hora marcada. Depois disso, a
-  // fila de 1 minuto segue publicando os destinos restantes.
-  await chrome.alarms.create(`campanha-${campanhaId}`, { when: quando });
+  const campanha = estado.campanhas.find(c => c.id === id);
+  if (!campanha) throw new Error('Campanha não encontrada.');
+  campanha.status = 'ativa';
+  campanha.proximaPublicacaoEm = Date.now();
+  campanha.atual = null;
+  await armazenamento.salvarEstado(estado);
+  await processarFila();
 }
+
+async function alterarPausa(id, pausar) {
+  const estado = await armazenamento.carregarEstado();
+  const campanha = estado.campanhas.find(c => c.id === id);
+  if (!campanha) throw new Error('Campanha não encontrada.');
+  if (pausar) {
+    campanha.status = 'pausada';
+    campanha.proximaPublicacaoEm = null;
+  } else {
+    campanha.status = 'ativa';
+    campanha.proximaPublicacaoEm = Date.now();
+    await agendarProxima(campanha);
+  }
+  await armazenamento.salvarEstado(estado);
+}
+

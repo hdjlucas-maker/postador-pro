@@ -51,34 +51,64 @@ async function carregarResumoLicenca() {
 
 async function renderizarCampanhas() {
   const estado = await armazenamento.carregarEstado();
-  const campanhasLista = estado.campanhas || [];
+  const lista = estado.campanhas || [];
+  const ativas = lista.filter(c => ['ativa', 'pausada', 'preparacao'].includes(c.status)).length;
+  $('contagem').textContent = `${ativas} campanha(s) em andamento de ${lista.length} no total.`;
 
-  const ativas = campanhasLista.filter(c => c.status === 'ativa').length;
-  $('contagem').textContent = `${ativas} campanha(s) ativa(s) de ${campanhasLista.length} no total.`;
-
-  const limite = estado.licenca && estado.licenca.limites ? estado.licenca.limites.campanhasAtivas : 3;
-
-  if (!campanhasLista.length) {
+  if (!lista.length) {
     $('lista-campanhas').innerHTML = '<p class="suave">Nenhuma campanha ainda. Crie a primeira!</p>';
     return;
   }
 
-  $('lista-campanhas').innerHTML = campanhasLista.map(c => `
-    <div class="cartao-campanha">
-      <h3>${escapar(c.nome)} <span class="status ${c.status}">${c.status}</span></h3>
-      <div class="meta">
-        ${c.destinos.length} destino(s) · ${c.textos.length} texto(s) ·
-        ${c.agendadoPara ? 'agendada para ' + formatarData(c.agendadoPara) : 'sem agendamento'} ·
-        publicado ${c.publicado} · falhou ${c.falhou}
-      </div>
+  const statusTexto = { preparacao: 'Preparação', ativa: 'Publicando', pausada: 'Pausada', concluida: 'Concluída' };
+  const itemTexto = { pendente: 'Aguardando', preparando: 'Preparando…', publicando: 'Publicando…', publicado: 'Publicado', falhou: 'Falha', nao_confirmado: 'Não confirmado' };
+
+  $('lista-campanhas').innerHTML = lista.map(c => {
+    const fila = c.fila || (c.destinos || []).map(destino => ({ destino, status: 'pendente' }));
+    const total = fila.length;
+    const publicados = fila.filter(i => i.status === 'publicado').length;
+    const falhas = fila.filter(i => i.status === 'falhou').length;
+    const incertos = fila.filter(i => i.status === 'nao_confirmado').length;
+    const restantes = fila.filter(i => i.status === 'pendente').length;
+    const progresso = total ? Math.round((publicados / total) * 100) : 0;
+    const podeIniciar = c.status === 'preparacao';
+    const pausada = c.status === 'pausada';
+    const ativa = c.status === 'ativa';
+    const proxima = c.proximaPublicacaoEm ? new Date(c.proximaPublicacaoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+    const linhas = fila.map(i => `<div class="item-fila"><span class="bolinha ${i.status}">${i.status === 'publicado' ? '✓' : i.status === 'falhou' ? '✕' : i.status === 'nao_confirmado' ? '⚠' : i.status === 'publicando' || i.status === 'preparando' ? '●' : '○'}</span><span><strong>${escapar(i.destino)}</strong><small>${itemTexto[i.status] || i.status}${i.erro ? ' — ' + escapar(i.erro) : ''}</small></span></div>`).join('');
+    return `<div class="cartao-campanha">
+      <div class="cabecalho-campanha"><h3>${escapar(c.nome)}</h3><span class="status ${c.status}">${statusTexto[c.status] || c.status}</span></div>
+      <div class="barra"><span style="width:${progresso}%"></span></div>
+      <div class="numeros"><b>${publicados}</b> publicados · <b>${falhas}</b> falhas · <b>${incertos}</b> não confirmados · <b>${restantes}</b> restantes</div>
+      <div class="meta">${total} grupos · ${c.textos?.length || 0} texto(s) · Próxima publicação: ${proxima}</div>
+      <div class="fila">${linhas}</div>
       <div class="acoes">
+        ${podeIniciar ? '<button class="botao" data-acao="iniciar" data-id="' + c.id + '">INICIAR PUBLICAÇÃO</button>' : ''}
+        ${ativa ? '<button class="botao secundario" data-acao="pausar" data-id="' + c.id + '">PAUSAR</button>' : ''}
+        ${pausada ? '<button class="botao" data-acao="retomar" data-id="' + c.id + '">RETOMAR CAMPANHA</button>' : ''}
         <button class="botao-link" data-acao="excluir" data-id="${c.id}">Excluir</button>
       </div>
-    </div>`).join('');
+      ${ativa ? '<p class="status-live">Status: ' + (c.atual ? 'Publicando ' + escapar(c.atual) : (c.proximaPublicacaoEm ? 'Aguardando intervalo' : 'Preparando')) + '</p>' : ''}
+    </div>`;
+  }).join('');
 
-  document.querySelectorAll('[data-acao="excluir"]').forEach(botao => {
-    botao.addEventListener('click', () => excluirCampanha(botao.dataset.id));
-  });
+  document.querySelectorAll('[data-acao]').forEach(botao => botao.addEventListener('click', async () => {
+    const id = botao.dataset.id;
+    const acao = botao.dataset.acao;
+    if (acao === 'excluir') return excluirCampanha(id);
+    if (acao === 'iniciar') {
+      if (!confirm('Iniciar esta campanha agora? A primeira publicação será iniciada imediatamente.')) return;
+      await chrome.runtime.sendMessage({ tipo: 'iniciar-campanha', campanhaId: id });
+    }
+    if (acao === 'pausar') {
+      await chrome.runtime.sendMessage({ tipo: 'pausar-campanha', campanhaId: id });
+    }
+    if (acao === 'retomar') {
+      if (!confirm('Retomar a campanha? Uma nova publicação poderá ser iniciada imediatamente.')) return;
+      await chrome.runtime.sendMessage({ tipo: 'retomar-campanha', campanhaId: id });
+    }
+    await renderizarCampanhas();
+  }));
 }
 
 async function excluirCampanha(id) {
@@ -160,13 +190,6 @@ $('botao-salvar').addEventListener('click', async () => {
       agendadoPara
     }, limites);
 
-    if (agendadoPara && agendadoPara !== null) {
-      chrome.runtime.sendMessage({ tipo: 'agendar-campanha', campanhaId: campanha.id }).catch(() => {});
-    } else {
-      // Publica já, sem agendamento.
-      chrome.runtime.sendMessage({ tipo: 'processar-agora' }).catch(() => {});
-    }
-
     mostrar('campanhas');
     await renderizarCampanhas();
   } catch (erro) {
@@ -176,3 +199,5 @@ $('botao-salvar').addEventListener('click', async () => {
 });
 
 carregarResumoLicenca();
+
+setInterval(() => { if (!$('secao-campanhas').classList.contains('oculta')) renderizarCampanhas().catch(() => {}); }, 2000);

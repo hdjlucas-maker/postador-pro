@@ -102,10 +102,6 @@ async function salvarEstado(estado) {
   });
 }
 
-function hojeChave() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 async function registrarPublicacao() {
   const estado = await carregarEstado();
   const hoje = hojeChave();
@@ -123,7 +119,7 @@ function hojeChave() {
 }
 
 export {
-  salvarImagem,
+  salvarImagem: imagemSalvar,
   buscarImagem: imagemBuscar,
   apagarImagem: imagemApagar,
   carregarEstado,
