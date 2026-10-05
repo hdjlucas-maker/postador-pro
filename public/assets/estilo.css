@@ -581,3 +581,6 @@ tr:last-child td {
 
 .assinatura-rodape { margin-left: 14px; color: var(--texto-suave); }
 @media (max-width: 640px) { .assinatura-rodape { display: block; margin: 6px 0 0; } }
+
+.suporte-contato { border-left: 4px solid #25d366; }
+.contato-email { margin: 14px 0 0; }

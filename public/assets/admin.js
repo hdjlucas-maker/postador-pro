@@ -44,7 +44,7 @@ async function carregarMetricas() {
       .join('');
 
     const alertas = [];
-    if (!dados.sistema?.smtp) alertas.push('SMTP não configurado: recuperação de senha indisponível.');
+    if (!dados.sistema?.email) alertas.push('E-mail não configurado: use o WhatsApp para suporte e redefinição manual.');
     if (!dados.sistema?.pagamento) alertas.push('INFINITEPAY_HANDLE vazio: o checkout não funciona.');
     if (Number(u.bloqueados || 0) > 0) alertas.push(`${u.bloqueados} conta(s) bloqueada(s).`);
 
@@ -89,7 +89,7 @@ async function carregarUsuarios() {
             <td>${etiqueta(rotulo)}</td>
             <td>${data(dataExpira)}</td>
             <td>${data(user.criadoEm)}</td>
-            <td><button class="botao secundario" type="button" data-reiniciar="${user.id}" style="padding:5px 11px;font-size:13px">Renovar 30 dias</button></td>
+            <td><button class="botao secundario" type="button" data-reiniciar="${user.id}" style="padding:5px 11px;font-size:13px">Renovar 30 dias</button> <button class="botao secundario" type="button" data-reset="${user.id}" style="padding:5px 11px;font-size:13px">Gerar senha</button></td>
           </tr>`;
         })
         .join('')
@@ -159,6 +159,22 @@ document.getElementById('atualizar').addEventListener('click', recarregar);
 document.getElementById('recarregar-pagamentos').addEventListener('click', recarregar);
 
 document.getElementById('linhas-usuarios').addEventListener('click', async evento => {
+  const botaoReset = evento.target.closest('[data-reset]');
+  if (botaoReset) {
+    const idReset = botaoReset.getAttribute('data-reset');
+    if (!window.confirm('Gerar uma nova senha temporária para este usuário? A senha atual deixará de funcionar.')) return;
+    botaoReset.disabled = true;
+    try {
+      const dados = await chamar(`/api/admin/users/${idReset}/redefinir-senha`, {});
+      window.alert(`Senha temporária gerada:\n\n${dados.senhaTemporaria}\n\nEnvie-a ao usuário pelo WhatsApp. Ela não será mostrada novamente.`);
+    } catch (erro) {
+      mostrar(avisoLogin, erro.message);
+    } finally {
+      botaoReset.disabled = false;
+    }
+    return;
+  }
+
   const botao = evento.target.closest('[data-reiniciar]');
   if (!botao) return;
 

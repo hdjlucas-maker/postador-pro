@@ -6,6 +6,7 @@ import * as db from '../db.js';
 import * as auth from '../auth.js';
 import * as billing from '../billing.js';
 import * as log from '../log.js';
+import * as crypto from '../crypto.js';
 import { naoEncontrado, paginacao } from './helpers.js';
 
 // Painel do administrador. Protegido por `exigirLogin` + `exigirAdmin`, e só
@@ -124,6 +125,27 @@ function criar() {
       total,
       totalPages: Math.ceil(total / perPage)
     });
+  });
+
+  app.post('/admin/users/:id/redefinir-senha', ...soAdmin, async c => {
+    const env = c.env;
+    const cfg = configMod.config(env);
+    const user = await db.users_porId(env, c.req.param('id'));
+    if (!user) throw naoEncontrado('Usuário não encontrado.');
+
+    // A senha aparece uma única vez para o administrador, que a entrega ao
+    // usuário pelo canal de suporte. Nunca é registrada no log.
+    const senhaTemporaria = `PP-${crypto.novoToken(6).slice(0, 10).toUpperCase()}`;
+    await db.users_atualizar(env, user._id, {
+      senhaHash: await crypto.hasharSenha(senhaTemporaria, cfg.PBKDF2_ITERACOES),
+      senhaAlteradaEm: new Date(),
+      loginFalhas: 0,
+      bloqueadoAte: null
+    });
+    await db.sessions_removerPorUsuario(env, user._id);
+
+    log.info('admin_senha_redefinida', { admin: c.get('user').email, userId: user._id });
+    return c.json({ ok: true, senhaTemporaria });
   });
 
   app.post('/admin/users/:id/acesso', ...soAdmin, async c => {
