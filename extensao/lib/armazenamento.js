@@ -109,7 +109,8 @@ async function salvarEstado(estado) {
 }
 
 function hojeChave() {
-  return new Date().toISOString().slice(0, 10);
+  const agora = new Date();
+  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
 }
 
 async function registrarPublicacao() {

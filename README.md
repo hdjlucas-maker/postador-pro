@@ -122,6 +122,28 @@ npm run backup -- listar
 npm run verificar:backup
 ```
 
+## Fila em grupos
+
+A extensão aceita um grupo por linha e processa uma nova postagem por destino.
+Antes de iniciar, a tela mostra a campanha, quantidade de grupos, imagem, texto,
+intervalo e início previsto. Durante a execução, o painel mostra o progresso,
+grupo atual, próximo horário e resultado individual de cada destino.
+O intervalo padrão entre postagens é sorteado entre 10 e 20 minutos; o usuário
+pode configurar uma faixa entre 10 minutos e 2 horas. A fila pausa diante de
+falha de publicação ou aviso do Facebook, registra o texto usado e mantém o
+contador diário no navegador. Os limites de plano são no máximo 5 grupos por
+dia na avaliação/Lite e 10 no Pro.
+
+O navegador precisa permanecer aberto. Se a execução for interrompida durante
+o envio, a extensão pausa e pede que o usuário confira o grupo antes de
+retomar, para reduzir o risco de publicação duplicada. O contador diário fica
+no armazenamento local da extensão; a API de licença fornece os limites do
+plano, mas não registra a contagem de publicações.
+
+Se o envio for incerto, a fila pede confirmação antes de retomar e ignora esse
+grupo para evitar uma repetição automática. “Usar novamente” abre uma cópia
+para revisão e exige iniciar a campanha manualmente.
+
 O `preflight` sai com código 1 quando algo impede o serviço: disco cheio, pasta
 sem escrita, SMTP ausente em produção, URL sem HTTPS. É o filtro entre "rodei o
 deploy" e "descobri com cliente esperando que nada funciona".

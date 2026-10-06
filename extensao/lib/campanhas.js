@@ -26,6 +26,20 @@ function validarCampanha(campanha, limites) {
       erros.push(`Cada texto pode ter no máximo ${CONFIG.MAX_TEXT_LENGTH} caracteres.`);
       break;
     }
+    let nivelChaves = 0;
+    for (const caractere of String(t)) {
+      if (caractere === '{') nivelChaves += 1;
+      if (caractere === '}') nivelChaves -= 1;
+      if (nivelChaves < 0) break;
+    }
+    if (nivelChaves !== 0) {
+      erros.push('Há chaves Spintax sem par. Corrija os trechos entre { } ou remova as chaves.');
+      break;
+    }
+    if (/\{[^{}]*\}/.test(String(t)) && /(?:\{\s*(?:\||\})|\|\s*\})/.test(String(t))) {
+      erros.push('Cada bloco Spintax precisa ter opções de texto separadas por |.');
+      break;
+    }
   }
 
   const destinos = (campanha.destinos || []).filter(d => String(d).trim());
@@ -34,9 +48,28 @@ function validarCampanha(campanha, limites) {
   } else if (limites && destinos.length > limites.destinosPorCampanha) {
     erros.push(`Seu plano permite no máximo ${limites.destinosPorCampanha} destinos por campanha.`);
   }
-
-  if (campanha.imagemId && !campanha.imagemId) {
-    erros.push('Imagem inválida.');
+  const vistos = new Set();
+  for (const destino of destinos) {
+    const valor = String(destino).trim();
+    let chave = valor.toLowerCase();
+    if (/^https?:\/\//i.test(valor)) {
+      try {
+        const url = new URL(valor);
+        if (url.protocol !== 'https:' || !['www.facebook.com', 'facebook.com', 'web.facebook.com', 'm.facebook.com'].includes(url.hostname.toLowerCase()) || !/^\/groups\/[^/]+\/?$/.test(url.pathname)) {
+          erros.push(`Destino inválido: “${valor}” não é um link direto de grupo do Facebook.`);
+          continue;
+        }
+        chave = url.pathname.replace(/\/$/, '').toLowerCase();
+      } catch (_) {
+        erros.push(`Link de grupo inválido: “${valor}”.`);
+        continue;
+      }
+    } else if (!/^[\p{L}\p{N}._-]+$/u.test(valor)) {
+      erros.push(`Destino inválido: use o link do grupo ou seu ID/identificador, sem espaços.`);
+      continue;
+    }
+    if (vistos.has(chave)) erros.push(`O grupo “${valor}” aparece mais de uma vez na fila.`);
+    vistos.add(chave);
   }
 
   if (campanha.agendadoPara) {
@@ -122,7 +155,7 @@ async function excluirCampanha(id) {
   await armazenamento.salvarEstado(estado);
 }
 
-async function registrarResultado(campanhaId, destino, resultado, erroDetalhado = '') {
+async function registrarResultado(campanhaId, destino, resultado, erroDetalhado = '', textoUsado = '') {
   const estado = await armazenamento.carregarEstado();
   const campanha = estado.campanhas.find(c => c.id === campanhaId);
   if (!campanha) return;
@@ -137,6 +170,7 @@ async function registrarResultado(campanhaId, destino, resultado, erroDetalhado 
     destino,
     resultado,
     erro: erroDetalhado || '',
+    texto: textoUsado || '',
     quando: Date.now()
   });
 

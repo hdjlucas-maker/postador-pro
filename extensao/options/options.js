@@ -9,6 +9,8 @@ const $ = id => document.getElementById(id);
 
 let imagemSelecionada = null; // { id, blob }
 let campanhaEditando = null;
+let salvandoCampanha = false;
+let ritmoAtual = { minMs: CONFIG.DELAY_ENTRE_POSTS_MIN * 1000, maxMs: CONFIG.DELAY_ENTRE_POSTS_MAX * 1000 };
 
 function mostrar(section) {
   $('secao-boas-vindas').classList.toggle('oculta', section !== 'boas-vindas');
@@ -54,20 +56,34 @@ async function carregarResumoLicenca() {
 
 function renderizarStatus(estado) {
   const execucao = estado.execucao || { fase: 'parado', mensagem: 'Nenhuma execução em andamento.' };
-  const nomes = { parado: 'Parado', preparando: 'Preparando', abrindo_grupo: 'Abrindo grupo', publicando: 'Publicando', aguardando: 'Aguardando intervalo', concluida: 'Concluída', erro: 'Erro' };
-  $('status-execucao').textContent = nomes[execucao.fase] || execucao.fase || 'Parado';
+  const nomes = { parado: 'Parado', preparando: 'Preparando', abrindo_grupo: 'Abrindo grupo', compositor_encontrado: 'Compositor encontrado', inserindo_mensagem: 'Inserindo mensagem', anexando_imagem: 'Anexando imagem', publicando: 'Publicando', aguardando: 'Aguardando intervalo', concluida: 'Concluída', erro: 'Erro' };
+  const rotuloStatus = execucao.fase === 'encerrada' ? 'Encerrada'
+    : execucao.fase === 'erro' && execucao.pausada ? 'Pausada por erro'
+      : execucao.pausada ? 'Pausada'
+        : nomes[execucao.fase] || execucao.fase || 'Parado';
+  $('status-execucao').textContent = rotuloStatus;
   $('detalhe-execucao').textContent = execucao.mensagem || 'Nenhuma execução em andamento.';
-  $('botao-pausar').classList.toggle('oculta', Boolean(execucao.pausada) || execucao.fase === 'parado' || execucao.fase === 'concluida');
-  $('botao-retomar').classList.toggle('oculta', !execucao.pausada);
+  $('botao-pausar').classList.toggle('oculta', Boolean(execucao.pausada) || execucao.fase === 'parado' || execucao.fase === 'concluida' || execucao.fase === 'encerrada');
+  $('botao-retomar').classList.toggle('oculta', !execucao.pausada || execucao.fase === 'encerrada');
   const campanha = (estado.campanhas || []).find(c => c.id === execucao.campanhaId) || (estado.campanhas || []).find(c => c.status === 'ativa');
   const historico = (estado.historico || []).filter(h => !campanha || h.campanhaId === campanha.id);
   const publicados = historico.filter(h => h.resultado === 'publicado').length;
   const falhas = historico.filter(h => h.resultado === 'falhou').length;
   const restantes = campanha ? (campanha.destinos || []).length : 0;
+  const total = campanha ? (campanha.destinosOriginais || campanha.destinos || []).length : 0;
+  const concluidos = publicados + falhas;
+  $('status-campanha').textContent = campanha ? `Campanha: ${campanha.nome}` : 'Status da campanha';
   $('status-concluidos').textContent = publicados;
   $('status-falhas').textContent = falhas;
   $('status-restantes').textContent = restantes;
-  $('status-proxima').textContent = execucao.proximaEm ? new Date(execucao.proximaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+  $('status-progresso').textContent = `${publicados} / ${total} grupos publicados${falhas ? ` · ${falhas} falha(s)` : ''}`;
+  $('status-barra').max = Math.max(1, total);
+  $('status-barra').value = Math.min(total, concluidos);
+  if (execucao.proximaEm) {
+    const segundos = Math.max(0, Math.ceil((execucao.proximaEm - Date.now()) / 1000));
+    const relogio = new Date(execucao.proximaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    $('status-proxima').textContent = `${relogio} (em ${String(Math.floor(segundos / 60)).padStart(2, '0')}:${String(segundos % 60).padStart(2, '0')})`;
+  } else $('status-proxima').textContent = '—';
   const fila = $('fila-visual');
   if (!campanha) { fila.innerHTML = ''; return; }
   const originais = campanha.destinosOriginais || campanha.destinos || [];
@@ -125,38 +141,47 @@ async function excluirCampanha(id) {
   await renderizarCampanhas();
 }
 
-const RITMOS = {
-  controlado: { texto: '10 a 15 minutos', minMs: 600000, maxMs: 900000 },
-  calmo: { texto: '15 a 20 minutos', minMs: 900000, maxMs: 1200000 },
-  seguro: { texto: '20 a 30 minutos', minMs: 1200000, maxMs: 1800000 }
-};
-
 async function carregarRitmo() {
   const estado = await armazenamento.carregarEstado();
-  const chave = estado.config && estado.config.ritmo && estado.config.ritmo.nome ? estado.config.ritmo.nome : 'controlado';
-  $('campo-ritmo').value = RITMOS[chave] || chave === 'manual' ? chave : 'controlado';
-  if (chave === 'manual' && estado.config.ritmo.minMs) $('campo-delay-manual').value = Math.round(estado.config.ritmo.minMs / 1000);
-  $('resumo-ritmo').textContent = chave === 'manual' ? `${$('campo-delay-manual').value} segundos` : RITMOS[$('campo-ritmo').value].texto;
+  const ritmo = estado.config?.ritmo || {};
+  ritmoAtual = {
+    minMs: ritmo.minMs || CONFIG.DELAY_ENTRE_POSTS_MIN * 1000,
+    maxMs: ritmo.maxMs || CONFIG.DELAY_ENTRE_POSTS_MAX * 1000
+  };
+  $('campo-delay-min').value = Math.round(ritmoAtual.minMs / 1000);
+  $('campo-delay-max').value = Math.round(ritmoAtual.maxMs / 1000);
+  atualizarResumoRitmo();
+}
+
+function atualizarResumoRitmo() {
+  const minimo = Number($('campo-delay-min').value || 600);
+  const maximo = Number($('campo-delay-max').value || 1200);
+  $('resumo-ritmo').textContent = `${minimo} a ${maximo} segundos`;
 }
 
 $('atalho-ritmo').addEventListener('click', async () => { await carregarRitmo(); mostrar('ritmo'); });
 $('atalho-faq').addEventListener('click', () => mostrar('ajuda'));
 $('botao-voltar-ajuda').addEventListener('click', () => mostrar('campanhas'));
-$('campo-ritmo').addEventListener('change', () => { const chave = $('campo-ritmo').value; $('resumo-ritmo').textContent = chave === 'manual' ? `${$('campo-delay-manual').value} segundos` : RITMOS[chave].texto; });
-$('campo-delay-manual').addEventListener('input', () => { if ($('campo-ritmo').value === 'manual') $('resumo-ritmo').textContent = `${$('campo-delay-manual').value} segundos`; });
+$('campo-delay-min').addEventListener('input', atualizarResumoRitmo);
+$('campo-delay-max').addEventListener('input', atualizarResumoRitmo);
 $('botao-cancelar-ritmo').addEventListener('click', () => mostrar('campanhas'));
 $('botao-salvar-ritmo').addEventListener('click', async () => {
   const estado = await armazenamento.carregarEstado();
-  const chave = $('campo-ritmo').value;
-  const ritmo = RITMOS[chave] || RITMOS.controlado;
-  const manualMs = Math.max(600000, Math.min(7200000, Number($('campo-delay-manual').value || 900) * 1000));
-  estado.config = { ...(estado.config || {}), ritmo: { nome: chave, minMs: chave === 'manual' ? manualMs : ritmo.minMs, maxMs: chave === 'manual' ? manualMs : ritmo.maxMs } };
+  const minimo = Number($('campo-delay-min').value);
+  const maximo = Number($('campo-delay-max').value);
+  if (!Number.isInteger(minimo) || !Number.isInteger(maximo) || minimo < 600 || maximo > 7200 || minimo > maximo) {
+    $('ritmo-salvo').textContent = 'Informe valores inteiros entre 600 e 7200, com o mínimo menor ou igual ao máximo.';
+    $('ritmo-salvo').classList.remove('oculta');
+    return;
+  }
+  estado.config = { ...(estado.config || {}), ritmo: { minMs: minimo * 1000, maxMs: maximo * 1000 } };
   await armazenamento.salvarEstado(estado);
   $('ritmo-salvo').classList.remove('oculta');
-  $('resumo-ritmo').textContent = ritmo.texto;
+  $('ritmo-salvo').textContent = 'Ritmo atualizado.';
+  atualizarResumoRitmo();
 });
 
-function abrirForm(nova) {
+async function abrirForm(nova) {
   $('titulo-form').textContent = nova ? 'Nova campanha' : 'Editar campanha';
   if (nova) {
     campanhaEditando = null;
@@ -171,14 +196,20 @@ function abrirForm(nova) {
     $('campo-imagem').value = '';
     $('erro-form').classList.add('oculta');
   }
+  await carregarRitmo();
+  atualizarPreview();
   mostrar('form');
 }
 
 async function editarCampanha(id) {
   const campanha = await campanhas.obterCampanha(id);
   if (!campanha) return;
+  if (campanha.status === 'ativa' || campanha.publicado > 0 || campanha.falhou > 0) {
+    alert('Esta campanha já foi iniciada. Use “Usar novamente” para revisar e iniciar uma nova execução.');
+    return;
+  }
   campanhaEditando = campanha;
-  abrirForm(false);
+  await abrirForm(false);
   $('campo-nome').value = campanha.nome || '';
   $('campo-texto').value = (campanha.textos || []).join('\n');
   $('campo-destinos').value = (campanha.destinosOriginais || campanha.destinos || []).join('\n');
@@ -198,22 +229,31 @@ async function editarCampanha(id) {
   atualizarPreview();
     }
   }
+  atualizarPreview();
   mostrar('form');
 }
 
 async function reutilizarCampanha(id) {
   const original = await campanhas.obterCampanha(id);
   if (!original) return;
-  const destinos = original.destinosOriginais || original.destinos || [];
-  const estado = await armazenamento.carregarEstado();
-  const limites = estado.licenca && estado.licenca.limites ? estado.licenca.limites : null;
-  try {
-    await campanhas.criarCampanha({ nome: `${original.nome} (cópia)`, textos: original.textos || [], destinos, imagemId: original.imagemId || null, agendadoPara: null }, limites);
-    await renderizarCampanhas();
-  } catch (erro) {
-    $('erro-form').textContent = erro.message || 'Não foi possível reutilizar a campanha.';
-    $('erro-form').classList.remove('oculta');
+  campanhaEditando = null;
+  await abrirForm(true);
+  $('campo-nome').value = `${original.nome} (cópia)`;
+  $('campo-texto').value = (original.textos || []).join('\n');
+  $('campo-destinos').value = (original.destinosOriginais || original.destinos || []).join('\n');
+  $('campo-responsabilidade').checked = false;
+  if (original.imagemId) {
+    const blob = await armazenamento.buscarImagem(original.imagemId).catch(() => null);
+    if (blob) {
+      imagemSelecionada = { id: original.imagemId, blob };
+      $('miniatura').src = URL.createObjectURL(blob);
+      $('preview-imagem').classList.remove('oculta');
+    }
   }
+  $('contador-destinos').textContent = `${(original.destinosOriginais || original.destinos || []).length} destino(s)`;
+  $('contador-texto').textContent = `${$('campo-texto').value.length} / ${CONFIG.MAX_TEXT_LENGTH}`;
+  atualizarPreview();
+  mostrar('form');
 }
 $('botao-nova').addEventListener('click', () => abrirForm(true));
 $('atalho-nova').addEventListener('click', () => abrirForm(true));
@@ -232,6 +272,7 @@ document.querySelectorAll('[data-emoji]').forEach(botao => {
 });
 $('botao-cancelar').addEventListener('click', () => mostrar('campanhas'));
 
+$('campo-nome').addEventListener('input', atualizarPreview);
 $('campo-agendar').addEventListener('change', () => { $('campo-horario').classList.toggle('oculta', !$('campo-agendar').checked); atualizarPreview(); });
 $('campo-horario').addEventListener('input', atualizarPreview);
 
@@ -262,35 +303,51 @@ $('campo-imagem').addEventListener('change', async () => {
 });
 
 $('remover-imagem').addEventListener('click', () => {
-  if (imagemSelecionada) armazenamento.apagarImagem(imagemSelecionada.id).catch(() => {});
+  // A imagem pode pertencer a outra campanha reutilizada; só retiramos esta
+  // referência. A limpeza de imagens sem uso fica a cargo da exclusão da campanha.
   imagemSelecionada = null;
   $('campo-imagem').value = '';
   $('preview-imagem').classList.add('oculta');
+  atualizarPreview();
 });
 
 function atualizarPreview() {
   const destinos = $('campo-destinos').value.split('\n').map(d => d.trim()).filter(Boolean);
   $('preview-nome').textContent = $('campo-nome').value || '—';
   $('preview-grupos').textContent = destinos.length;
-  $('preview-imagem-texto').textContent = imagemSelecionada ? 'configurada' : 'não configurada';
+  const nomeImagem = imagemSelecionada?.blob?.name || '';
+  $('preview-imagem-texto').textContent = imagemSelecionada ? (nomeImagem || 'configurada') : 'não configurada';
   $('preview-texto').textContent = $('campo-texto').value.trim() ? 'configurado' : 'não configurado';
-  $('preview-inicio').textContent = $('campo-agendar').checked ? ($('campo-horario').value || 'horário não definido') : 'agora';
+  const min = Math.round(ritmoAtual.minMs / 60000);
+  const max = Math.round(ritmoAtual.maxMs / 60000);
+  $('preview-intervalo').textContent = `${min}–${max} minutos`;
+  $('preview-inicio').textContent = $('campo-agendar').checked
+    ? ($('campo-horario').value ? new Date($('campo-horario').value).toLocaleString('pt-BR') : 'horário não definido')
+    : 'agora';
+  $('botao-postar-agora').disabled = $('campo-agendar').checked || salvandoCampanha;
+  $('botao-salvar').disabled = !$('campo-agendar').checked || salvandoCampanha;
 }
 
 async function salvarCampanha(modo = 'salvar') {
+  if (salvandoCampanha) return;
+  salvandoCampanha = true;
+  atualizarPreview();
   $('erro-form').classList.add('oculta');
-  const postarAgora = modo === 'agora';
-  if (!$('campo-responsabilidade').checked) {
-    $('erro-form').textContent = 'Confirme que você pode publicar nesses grupos e que a mensagem respeita as regras do grupo.';
-    $('erro-form').classList.remove('oculta');
-    return;
-  }
-  const destinos = $('campo-destinos').value.split('\n').map(d => d.trim()).filter(Boolean);
-  const agendadoPara = !postarAgora && $('campo-agendar').checked ? new Date($('campo-horario').value).toISOString() : null;
-  const estado = await armazenamento.carregarEstado();
-  const limites = estado.licenca && estado.licenca.limites ? estado.licenca.limites : null;
-
   try {
+    const postarAgora = modo === 'agora';
+    if (!$('campo-responsabilidade').checked) throw new Error('Confirme que você pode publicar nesses grupos e que a mensagem respeita as regras do grupo.');
+    if (postarAgora && $('campo-agendar').checked) throw new Error('Desmarque o agendamento para iniciar agora.');
+    if (!postarAgora && !$('campo-agendar').checked) throw new Error('Marque “Agendar publicação” antes de agendar a campanha.');
+
+    const destinos = $('campo-destinos').value.split('\n').map(d => d.trim()).filter(Boolean);
+    let agendadoPara = null;
+    if (!postarAgora) {
+      const data = new Date($('campo-horario').value);
+      if (Number.isNaN(data.getTime())) throw new Error('Escolha uma data e um horário válidos para o agendamento.');
+      agendadoPara = data.toISOString();
+    }
+    const estado = await armazenamento.carregarEstado();
+    const limites = estado.licenca?.limites || null;
     const dadosCampanha = {
       nome: $('campo-nome').value,
       textos: [$('campo-texto').value],
@@ -300,28 +357,51 @@ async function salvarCampanha(modo = 'salvar') {
       agendadoPara,
       status: 'ativa'
     };
+    const validacao = campanhas.validarCampo(dadosCampanha, limites);
+    if (!validacao.ok) throw new Error(validacao.erros.join(' '));
+    if (campanhaEditando && (campanhaEditando.status === 'ativa' || campanhaEditando.publicado > 0 || campanhaEditando.falhou > 0)) {
+      throw new Error('Esta campanha já foi iniciada. Use “Usar novamente” para criar outra execução sem repetir grupos publicados.');
+    }
     const campanha = campanhaEditando
       ? await campanhas.atualizarCampanha(campanhaEditando.id, dadosCampanha)
       : await campanhas.criarCampanha(dadosCampanha, limites);
 
     if (agendadoPara) {
       await chrome.runtime.sendMessage({ tipo: 'agendar-campanha', campanhaId: campanha.id });
+      mostrar('campanhas');
+      await renderizarCampanhas();
     } else {
-      const resposta = await chrome.runtime.sendMessage({ tipo: 'processar-agora' });
-      if (resposta && !resposta.ok) throw new Error(resposta.erro || 'A publicação não foi iniciada.');
+      const inicio = chrome.runtime.sendMessage({ tipo: 'processar-agora' });
+      mostrar('campanhas');
+      await renderizarCampanhas();
+      renderizarStatus(await armazenamento.carregarEstado());
+      const resposta = await inicio;
+      if (resposta && !resposta.ok) {
+        renderizarStatus(await armazenamento.carregarEstado());
+        $('detalhe-execucao').textContent = resposta.erro || 'A publicação não foi iniciada.';
+      }
     }
-    mostrar('campanhas');
-    await renderizarCampanhas();
   } catch (erro) {
     $('erro-form').textContent = erro.message || 'Não deu para iniciar a campanha.';
     $('erro-form').classList.remove('oculta');
+  } finally {
+    salvandoCampanha = false;
+    atualizarPreview();
   }
 }
 
 $('botao-postar-agora').addEventListener('click', () => salvarCampanha('agora'));
 $('botao-salvar').addEventListener('click', () => salvarCampanha('salvar'));
 $('botao-pausar').addEventListener('click', async () => { await chrome.runtime.sendMessage({ tipo: 'pausar-campanha' }); renderizarStatus(await armazenamento.carregarEstado()); });
-$('botao-retomar').addEventListener('click', async () => { if (!confirm('Retomar a campanha e iniciar novos grupos?')) return; await chrome.runtime.sendMessage({ tipo: 'retomar-campanha' }); renderizarStatus(await armazenamento.carregarEstado()); });
+$('botao-retomar').addEventListener('click', async () => {
+  const estado = await armazenamento.carregarEstado();
+  const texto = estado.execucao?.confirmacaoPendente
+    ? 'Confira no Facebook se a postagem foi publicada. Ao retomar, este grupo será marcado como não confirmado e ignorado para evitar duplicação. Deseja continuar com os próximos grupos?'
+    : 'Retomar a campanha e iniciar os próximos grupos?';
+  if (!confirm(texto)) return;
+  await chrome.runtime.sendMessage({ tipo: 'retomar-campanha' });
+  renderizarStatus(await armazenamento.carregarEstado());
+});
 $('botao-encerrar').addEventListener('click', async () => { if (!confirm('Encerrar esta campanha? Nenhum novo grupo será publicado.')) return; await chrome.runtime.sendMessage({ tipo: 'encerrar-campanha' }); renderizarStatus(await armazenamento.carregarEstado()); });
 
 carregarResumoLicenca();

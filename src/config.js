@@ -35,12 +35,12 @@ const PLANS = {
 // publicação: ele devolve os números do plano e a extensão faz a autolimitação.
 const PLAN_LIMITS = {
   trial: {
-    gruposPorDia: num(process.env.LIMIT_TRIAL_GRUPOS_DIA, 10),
+    gruposPorDia: Math.min(5, num(process.env.LIMIT_TRIAL_GRUPOS_DIA, 5)),
     campanhasAtivas: num(process.env.LIMIT_TRIAL_CAMPANHAS, 3),
     destinosPorCampanha: num(process.env.LIMIT_TRIAL_DESTINOS, 5)
   },
   pro: {
-    gruposPorDia: num(process.env.LIMIT_PRO_GRUPOS_DIA, 300),
+    gruposPorDia: Math.min(10, num(process.env.LIMIT_PRO_GRUPOS_DIA, 10)),
     campanhasAtivas: num(process.env.LIMIT_PRO_CAMPANHAS, 50),
     destinosPorCampanha: num(process.env.LIMIT_PRO_DESTINOS, 100)
   }

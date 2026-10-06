@@ -75,7 +75,7 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect(corpoCadastro.email).toBe(email);
     expect(corpoCadastro.plano).toBe('trial');
     expect(corpoCadastro.admin).toBe(false);
-    expect(corpoCadastro.limites.gruposPorDia).toBe(10);
+    expect(corpoCadastro.limites.gruposPorDia).toBe(5);
 
     const rotas = parDe(cadastro.headers);
     expect(rotas.get('postador_session')).toBeTruthy();

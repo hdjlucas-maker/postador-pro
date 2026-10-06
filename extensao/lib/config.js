@@ -13,9 +13,9 @@ const CONFIG = {
   CADENCIA_MIN_MS: 35,
   CADENCIA_MAX_MS: 95,
 
-  // Espera entre postagens, em segundos.
-  DELAY_ENTRE_POSTS_MIN: 25,
-  DELAY_ENTRE_POSTS_MAX: 60,
+  // Intervalo padrão entre novas postagens: 10–20 minutos.
+  DELAY_ENTRE_POSTS_MIN: 600,
+  DELAY_ENTRE_POSTS_MAX: 1200,
 
   // Limites de conteúdo.
   MAX_IMAGE_BYTES: 8388608,

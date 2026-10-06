@@ -10,8 +10,7 @@ const SELETORES = {
   compositor: [
     'div[role="dialog"] div[contenteditable="true"]',
     'div[role="dialog"] div[aria-label*="Escreva"]',
-    'div[role="dialog"] div[aria-label*="Write"]',
-    'form[method="POST"] div[contenteditable="true"]'
+    'div[role="dialog"] div[aria-label*="Write"]'
   ],
   botaoPublicar: [
     'div[role="dialog"] div[aria-label="Publicar"]',
@@ -34,12 +33,23 @@ function esperar(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function reportarStatus(fase, mensagem) {
+  chrome.runtime.sendMessage({ tipo: 'status-publicacao', fase, mensagem }).catch(() => {});
+}
+
 function seguroParaPublicacao(elemento) {
   if (!elemento) return false;
-  // Nunca usar editor, botão ou anexo dentro de um post existente: ali o
-  // Facebook publica comentário/resposta, não uma nova publicação do grupo.
-  if (elemento.closest('article') && !elemento.closest('[role="dialog"]')) return false;
+  const dialogo = elemento.closest('[role="dialog"]');
+  if (!dialogo || elemento.closest('article') || !dialogoNovaPublicacao(dialogo)) return false;
   return visivel(elemento);
+}
+
+function dialogoNovaPublicacao(dialogo) {
+  if (!dialogo) return false;
+  const texto = (dialogo.innerText || '').toLowerCase();
+  const titulo = dialogo.querySelector('[role="heading"], h1, h2, h3');
+  const nome = (titulo?.innerText || titulo?.textContent || '').toLowerCase();
+  return /criar publica[cç][aã]o|create post|create a post|nova publica[cç][aã]o|new post/.test(`${nome} ${texto}`);
 }
 
 function primeiro(seletores) {
@@ -61,8 +71,7 @@ async function esperarElemento(seletores, timeoutMs = 15000) {
   return null;
 }
 
-// Digita o texto com cadência aleatória, simulando digitação humana para não
-// parecer automação.
+// Insere o texto no editor do compositor confirmado.
 async function digitarTexto(elemento, texto, cadenciaMin = 35, cadenciaMax = 95) {
   elemento.focus();
   // O editor do Facebook é controlado por React: alterar apenas textContent
@@ -88,20 +97,41 @@ function visivel(elemento) {
 function elementoPorTexto(textos, somenteDialogo = false) {
   const candidatos = document.querySelectorAll('[role="button"], button, [aria-label]');
   for (const elemento of candidatos) {
-    if (!seguroParaPublicacao(elemento)) continue;
-    if (somenteDialogo && !elemento.closest('[role="dialog"]')) continue;
+    if (somenteDialogo) {
+      if (!seguroParaPublicacao(elemento)) continue;
+    } else if (elemento.closest('article') || !visivel(elemento)) {
+      // Este caminho serve apenas para abrir o compositor na página do grupo.
+      // Campos e ações de publicação continuam restritos ao diálogo confirmado.
+      continue;
+    }
     const texto = `${elemento.getAttribute('aria-label') || ''} ${elemento.textContent || ''}`.toLowerCase();
     if (textos.some(alvo => texto.includes(alvo))) return elemento;
   }
   return null;
 }
 
+function botaoPublicarDoDialog(dialogo) {
+  return Array.from(dialogo.querySelectorAll('button, [role="button"]')).find(elemento => {
+    if (!seguroParaPublicacao(elemento) || elemento.closest('[role="dialog"]') !== dialogo) return false;
+    const rotulo = String(elemento.getAttribute('aria-label') || elemento.innerText || elemento.textContent || '')
+      .trim().toLowerCase().replace(/\s+/g, ' ');
+    return /^(publicar|postar|post)$/.test(rotulo) && !elemento.disabled && elemento.getAttribute('aria-disabled') !== 'true';
+  }) || null;
+}
+
 async function anexarImagem(dados, tipo) {
-  let input = document.querySelector(SELETORES.inputArquivo);
+  const editor = primeiro(SELETORES.compositor);
+  const dialogo = editor?.closest('[role="dialog"]');
+  if (!dialogo || !dialogoNovaPublicacao(dialogo)) return false;
+  let input = dialogo.querySelector(SELETORES.inputArquivo);
   if (!input) {
-    const foto = primeiro(SELETORES.botaoFoto) || elementoPorTexto(['foto/vídeo', 'photo/video', 'adicionar foto'], true);
+    const foto = Array.from(dialogo.querySelectorAll(SELETORES.botaoFoto.join(','))).find(seguroParaPublicacao) || elementoPorTexto(['foto/vídeo', 'photo/video', 'adicionar foto'], true);
     if (foto) foto.click();
-    input = await esperarElemento([SELETORES.inputArquivo], 5000);
+    const inicio = Date.now();
+    while (!input && Date.now() - inicio < 5000) {
+      input = dialogo.querySelector(SELETORES.inputArquivo);
+      if (!input) await esperar(250);
+    }
   }
   if (!input) return false;
 
@@ -116,7 +146,7 @@ async function anexarImagem(dados, tipo) {
 
 function detectarAvisoFacebook() {
   const corpo = (document.body?.innerText || '').toLowerCase();
-  const sinais = ['temporariamente bloquead', 'conta foi suspensa', 'sua conta foi restringida', 'you’re temporarily blocked', 'you are temporarily blocked', 'account has been suspended', 'we limit how often'];
+  const sinais = ['temporariamente bloquead', 'conta foi suspensa', 'sua conta foi restringida', 'atividade restrita', 'atividade suspeita', 'aviso de spam', 'you’re temporarily blocked', 'you are temporarily blocked', 'account has been suspended', 'we limit how often', 'restricted activity', 'spam warning'];
   return sinais.some(sinal => corpo.includes(sinal));
 }
 
@@ -135,12 +165,18 @@ async function publicar({ texto, imagemDados, imagemTipo, cadenciaMin, cadenciaM
     compositor = await esperarElemento(SELETORES.compositor, 15000);
   }
   if (!compositor) {
-    return { ok: false, erro: 'Não encontrei o compositor do Facebook. Confirme que está logado e com a página aberta.' };
+    return { ok: false, erro: 'Compositor não encontrado. Nenhuma publicação foi enviada. A fila foi pausada.' };
   }
 
+  if (!dialogoNovaPublicacao(compositor.closest('[role="dialog"]'))) {
+    return { ok: false, erro: 'Não foi possível confirmar o compositor de nova postagem. Nenhum comentário foi enviado. A fila foi pausada.' };
+  }
+  reportarStatus('compositor_encontrado', 'Compositor de nova postagem confirmado.');
+  reportarStatus('inserindo_mensagem', 'Inserindo a mensagem no grupo.');
   await digitarTexto(compositor, texto, cadenciaMin, cadenciaMax);
 
   if (imagemDados) {
+    reportarStatus('anexando_imagem', 'Anexando imagem à nova postagem.');
     const anexou = await anexarImagem(imagemDados, imagemTipo);
     if (!anexou) {
       return { ok: false, erro: 'Não encontrei o botão de anexar imagem.' };
@@ -149,17 +185,18 @@ async function publicar({ texto, imagemDados, imagemTipo, cadenciaMin, cadenciaM
     await esperar(3000);
   }
 
+  const dialogo = compositor.closest('[role="dialog"]');
   let botao = await esperarElemento(SELETORES.botaoPublicar, 10000);
-  if (!botao) botao = elementoPorTexto(['publicar', 'post'], true);
-  if (!botao || !botao.closest('[role="dialog"]')) {
-    return { ok: false, erro: 'Não encontrei o botão Publicar da nova postagem do grupo. Nenhum comentário será enviado.' };
+  if (!botao || botao.closest('[role="dialog"]') !== dialogo) botao = botaoPublicarDoDialog(dialogo);
+  if (!botao || botao.closest('[role="dialog"]') !== dialogo || !dialogoNovaPublicacao(dialogo) || botao.disabled || botao.getAttribute('aria-disabled') === 'true') {
+    return { ok: false, naoConfirmada: true, erro: '⚠ Publicação não confirmada. O botão “Publicar” não pôde ser confirmado. Este grupo não será reprocessado automaticamente.' };
   }
 
   botao.click();
   // Espera a publicação concluir.
   await esperar(4000);
   if (detectarAvisoFacebook()) return { ok: false, pausar: true, erro: 'O Facebook exibiu um aviso após a operação. A fila foi pausada para proteger a conta.' };
-
+  if (dialogo.isConnected) return { ok: false, naoConfirmada: true, erro: '⚠ Publicação não confirmada. O Facebook não confirmou o envio. Este grupo não será reprocessado automaticamente.' };
   return { ok: true };
 }
 

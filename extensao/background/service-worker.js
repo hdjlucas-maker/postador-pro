@@ -51,8 +51,10 @@ let abaAutomacaoId = null;
 function atrasoDoRitmo(estado) {
   const ritmo = estado.config && estado.config.ritmo;
   const min = Number(ritmo && ritmo.minMs) || 600000;
-  const max = Number(ritmo && ritmo.maxMs) || 900000;
-  return Math.floor(Math.random() * (Math.max(min, max) - min + 1)) + min;
+  const max = Number(ritmo && ritmo.maxMs) || 1200000;
+  const minimoSeguro = Math.max(600000, min);
+  const maximoSeguro = Math.max(minimoSeguro, Math.min(7200000, max));
+  return Math.floor(Math.random() * (maximoSeguro - minimoSeguro + 1)) + minimoSeguro;
 }
 
 async function atualizarStatus(fase, mensagem, extras = {}) {
@@ -68,10 +70,15 @@ async function processarFila(forcar = false) {
   try {
     const estado = await armazenamento.carregarEstado();
     if (estado.execucao && estado.execucao.pausada) return { ok: false, erro: 'A fila está pausada porque o Facebook exibiu um aviso. Verifique o Facebook antes de retomar.' };
+    if (estado.execucao?.fase === 'publicando') {
+      estado.execucao = { ...estado.execucao, fase: 'erro', pausada: true, confirmacaoPendente: true, mensagem: '⚠ Publicação não confirmada. Verifique o grupo no Facebook antes de retomar. Este grupo não será reprocessado automaticamente.', atualizadoEm: Date.now() };
+      await armazenamento.salvarEstado(estado);
+      return { ok: false, erro: estado.execucao.mensagem };
+    }
 
     // Um clique explícito em Postar agora inicia a primeira publicação. Depois
     // dela, o intervalo escolhido continua sendo respeitado.
-    if (!forcar && estado.proximaPublicacaoEm && Date.now() < estado.proximaPublicacaoEm) {
+    if (estado.proximaPublicacaoEm && Date.now() < estado.proximaPublicacaoEm) {
       return { ok: false, erro: 'Aguarde o intervalo entre publicações antes do próximo grupo.' };
     }
     if (forcar && estado.ultimaPublicacao && Date.now() - estado.ultimaPublicacao < 600000) {
@@ -83,8 +90,13 @@ async function processarFila(forcar = false) {
 
     const hoje = armazenamento.hojeChave();
     if (estado.contadoresDia && estado.contadoresDia.data === hoje) {
-      const limite = estado.licenca && estado.licenca.limites ? estado.licenca.limites.gruposPorDia : 10;
-      if (estado.contadoresDia.grupos >= limite) return { ok: false, erro: 'O limite diário de grupos foi atingido.' };
+      const limite = Number(estado.licenca?.limites?.gruposPorDia) || (estado.licenca?.plano === 'pro' ? 10 : 5);
+      if (estado.contadoresDia.grupos >= limite) {
+        estado.proximaPublicacaoEm = 0;
+        estado.execucao = { ...(estado.execucao || {}), fase: 'parado', pausada: true, proximaEm: 0, mensagem: 'Limite diário atingido. A fila foi pausada para proteger sua conta.', atualizadoEm: Date.now() };
+        await armazenamento.salvarEstado(estado);
+        return { ok: false, erro: 'Limite diário atingido. A fila foi pausada para proteger sua conta.' };
+      }
     }
 
     const campanha = proximaCampanha(estado.campanhas);
@@ -95,10 +107,11 @@ async function processarFila(forcar = false) {
 
     const destino = campanha.destinos[0];
     await atualizarStatus('abrindo_grupo', `Abrindo o grupo ${destino}.`, { campanhaId: campanha.id, destino });
-    const resultado = await publicarEmDestino(campanha, destino);
+    const resultado = await publicarEmDestino(campanha, destino).catch(erro => ({ ok: false, pausar: true, erro: String(erro?.message || erro || 'Falha ao executar a publicação.') }));
+    if (resultado.cancelada) return { ok: false, erro: resultado.erro };
 
     if (resultado.ok) await armazenamento.registrarPublicacao();
-    await campanhas.registrarResultado(campanha.id, destino, resultado.ok ? 'publicado' : 'falhou', resultado.erro || '');
+    await campanhas.registrarResultado(campanha.id, destino, resultado.ok ? 'publicado' : 'falhou', resultado.erro || '', resultado.textoUsado || '');
 
     // Recarrega depois dos contadores para não sobrescrever publicado/falhou
     // com uma cópia antiga do estado.
@@ -106,17 +119,35 @@ async function processarFila(forcar = false) {
     const campanhaAtual = atualizado.campanhas.find(c => c.id === campanha.id);
     if (campanhaAtual) {
       campanhaAtual.destinos.shift();
-      if (resultado.pausar) {
-        atualizado.execucao = { fase: 'erro', pausada: true, mensagem: resultado.erro, atualizadoEm: Date.now() };
+      const encerradaDuranteEnvio = campanhaAtual.status === 'encerrada';
+      const pausadaDuranteEnvio = campanhaAtual.status === 'pausada' || atualizado.execucao?.pausada;
+      if (encerradaDuranteEnvio) {
         atualizado.proximaPublicacaoEm = 0;
+        atualizado.execucao = { fase: 'encerrada', pausada: true, mensagem: resultado.ok ? 'Campanha encerrada. A publicação que já estava em andamento terminou; nenhum novo grupo será iniciado.' : (resultado.erro || 'Campanha encerrada.'), campanhaId: campanha.id, destino, atualizadoEm: Date.now() };
+      } else if (resultado.ok && !campanhaAtual.destinos.length) {
+        campanhaAtual.status = 'concluida';
+        atualizado.proximaPublicacaoEm = 0;
+        atualizado.execucao = { fase: 'concluida', pausada: false, mensagem: 'Campanha concluída.', campanhaId: campanha.id, destino, atualizadoEm: Date.now() };
+      } else if (resultado.pausar || !resultado.ok || pausadaDuranteEnvio) {
+        campanhaAtual.status = 'pausada';
+        if (resultado.ok && campanhaAtual.destinos.length) atualizado.proximaPublicacaoEm = Date.now() + atrasoDoRitmo(atualizado);
+        atualizado.execucao = {
+          fase: resultado.ok ? 'parado' : 'erro',
+          pausada: true,
+          mensagem: !resultado.ok ? resultado.erro : 'Publicação atual concluída. Campanha pausada; nenhum novo grupo será iniciado.',
+          campanhaId: campanha.id,
+          destino,
+          atualizadoEm: Date.now(),
+          ...(resultado.ok && campanhaAtual.destinos.length ? { proximaEm: atualizado.proximaPublicacaoEm } : {})
+        };
       } else if (!campanhaAtual.destinos.length) {
         campanhaAtual.status = 'concluida';
         atualizado.proximaPublicacaoEm = 0;
-        atualizado.execucao = { fase: 'concluida', mensagem: 'Campanha concluída sem abrir a tela do usuário.', atualizadoEm: Date.now() };
+        atualizado.execucao = { fase: 'concluida', mensagem: 'Campanha concluída. O Facebook foi usado em uma aba inativa.', campanhaId: campanha.id, atualizadoEm: Date.now() };
       } else {
         atualizado.proximaPublicacaoEm = Date.now() + atrasoDoRitmo(atualizado);
         chrome.alarms.create('processar-fila-delay', { when: atualizado.proximaPublicacaoEm });
-        atualizado.execucao = { fase: 'aguardando', mensagem: `Grupo publicado. Próximo grupo após o intervalo configurado.`, atualizadoEm: Date.now(), proximaEm: atualizado.proximaPublicacaoEm };
+        atualizado.execucao = { fase: 'aguardando', mensagem: 'Grupo publicado. Aguardando o intervalo configurado.', campanhaId: campanha.id, atualizadoEm: Date.now(), proximaEm: atualizado.proximaPublicacaoEm };
       }
       campanhaAtual.ultimoTextoUsado = resultado.textoUsado || campanhaAtual.ultimoTextoUsado || '';
       atualizado.ultimoErroPublicacao = resultado.ok ? '' : String(resultado.erro || 'O Facebook não confirmou a publicação.');
@@ -128,7 +159,15 @@ async function processarFila(forcar = false) {
     const estado = await armazenamento.carregarEstado().catch(() => null);
     if (estado) {
       estado.ultimoErroPublicacao = String(erro?.message || erro || 'Falha desconhecida na publicação.');
-      estado.execucao = { fase: 'erro', mensagem: estado.ultimoErroPublicacao, atualizadoEm: Date.now() };
+      const envioIncerto = estado.execucao?.fase === 'publicando';
+      estado.execucao = {
+        ...(estado.execucao || {}),
+        fase: 'erro',
+        pausada: true,
+        ...(envioIncerto ? { confirmacaoPendente: true } : {}),
+        mensagem: envioIncerto ? '⚠ Publicação não confirmada. Verifique o grupo no Facebook antes de retomar. Este grupo não será reprocessado automaticamente.' : estado.ultimoErroPublicacao,
+        atualizadoEm: Date.now()
+      };
       await armazenamento.salvarEstado(estado).catch(() => {});
     }
     throw erro;
@@ -201,7 +240,17 @@ async function publicarEmDestino(campanha, destino) {
   const texto = escolherTexto(campanha);
 
   // ArrayBuffer atravessa o messaging de extensão de forma confiável; Blob não.
-  await atualizarStatus('publicando', `Enviando a nova postagem para ${destino}.`, { destino });
+  await atualizarStatus('publicando', `Enviando a nova postagem para ${destino}.`, { campanhaId: campanha.id, destino, textoUsado: texto });
+  const controle = await armazenamento.carregarEstado();
+  const campanhaControle = controle.campanhas.find(item => item.id === campanha.id);
+  if (controle.execucao?.pausada || campanhaControle?.status !== 'ativa') {
+    const encerrada = campanhaControle?.status === 'encerrada';
+    const mensagem = encerrada
+      ? 'Campanha encerrada antes do envio. Nenhuma publicação foi iniciada.'
+      : 'Campanha pausada antes do envio. Nenhuma publicação foi iniciada.';
+    await atualizarStatus(encerrada ? 'encerrada' : 'parado', mensagem, { pausada: true, campanhaId: campanha.id, destino });
+    return { ok: false, cancelada: true, erro: mensagem };
+  }
   const resposta = await chrome.tabs.sendMessage(aba.id, {
     tipo: 'publicar',
     texto,
@@ -232,9 +281,11 @@ async function abrirAbaFacebook() {
 
 function montarUrlGrupo(destino) {
   const limpo = String(destino).trim();
-  if (/^https?:\/\//.test(limpo)) return limpo;
-  // Aceita nome de grupo ou ID.
-  return `https://www.facebook.com/groups/${limpo}`;
+  const url = /^https?:\/\//i.test(limpo) ? new URL(limpo) : new URL(`https://www.facebook.com/groups/${encodeURIComponent(limpo)}`);
+  if (!['www.facebook.com', 'facebook.com', 'web.facebook.com', 'm.facebook.com'].includes(url.hostname.toLowerCase()) || !/^\/groups\/[^/]+/.test(url.pathname)) {
+    throw new Error('Destino inválido: informe um link de grupo do Facebook ou o ID do grupo.');
+  }
+  return `https://www.facebook.com${url.pathname}${url.search}`;
 }
 
 function esperar(ms) {
@@ -244,7 +295,23 @@ function esperar(ms) {
 // Mensagens do popup/options.
 chrome.runtime.onMessage.addListener((mensagem, _sender, enviarResposta) => {
   if (mensagem && mensagem.tipo === 'processar-agora') {
-    processarFila(true).then(enviarResposta).catch(erro => enviarResposta({ ok: false, erro: String(erro?.message || erro) }));
+    if (processando) {
+      enviarResposta({ ok: false, erro: 'A fila já está processando uma campanha.' });
+      return false;
+    }
+    processarFila(true).then(async resultado => {
+      if (!resultado?.ok && resultado?.erro) {
+        const estado = await armazenamento.carregarEstado().catch(() => null);
+        if (estado?.execucao?.pausada) {
+          // A fila já guardou o erro ou o motivo da pausa.
+        } else if (resultado.erro.includes('intervalo entre publicações')) {
+          await atualizarStatus('aguardando', resultado.erro, { proximaEm: estado?.proximaPublicacaoEm || 0 });
+        } else {
+          await atualizarStatus('erro', resultado.erro, { pausada: true, campanhaId: estado?.campanhas.find(c => c.status === 'ativa')?.id });
+        }
+      }
+      enviarResposta(resultado);
+    }).catch(erro => enviarResposta({ ok: false, erro: String(erro?.message || erro) }));
     return true;
   }
   if (mensagem && mensagem.tipo === 'pausar-campanha') {
@@ -265,6 +332,10 @@ chrome.runtime.onMessage.addListener((mensagem, _sender, enviarResposta) => {
       .catch(erro => enviarResposta({ ok: false, erro: String(erro) }));
     return true;
   }
+  if (mensagem && mensagem.tipo === 'status-publicacao') {
+    atualizarStatus(mensagem.fase, mensagem.mensagem, {}).then(() => enviarResposta({ ok: true }));
+    return true;
+  }
   return false;
 });
 
@@ -272,17 +343,41 @@ async function pausarFila() {
   const estado = await armazenamento.carregarEstado();
   const campanha = estado.campanhas.find(c => c.id === estado.execucao?.campanhaId) || estado.campanhas.find(c => c.status === 'ativa');
   if (campanha) campanha.status = 'pausada';
-  estado.execucao = { ...(estado.execucao || {}), fase: 'parado', pausada: true, mensagem: 'Campanha pausada. Nenhuma nova publicação será iniciada.', atualizadoEm: Date.now() };
+  estado.execucao = { ...(estado.execucao || {}), fase: 'parado', pausada: true, mensagem: 'Campanha pausada. A publicação atual pode terminar; nenhum novo grupo será iniciado.', atualizadoEm: Date.now() };
   await armazenamento.salvarEstado(estado);
   await chrome.alarms.clear('processar-fila-delay');
 }
 
 async function retomarFila() {
   const estado = await armazenamento.carregarEstado();
+  if (estado.execucao?.fase === 'encerrada') return;
   const campanha = estado.campanhas.find(c => c.id === estado.execucao?.campanhaId) || estado.campanhas.find(c => c.status === 'pausada');
-  if (campanha) campanha.status = 'ativa';
-  estado.execucao = { ...(estado.execucao || {}), fase: 'preparando', pausada: false, mensagem: 'Campanha retomada. A fila será processada com o intervalo configurado.', atualizadoEm: Date.now() };
-  await armazenamento.salvarEstado(estado);
+  if (estado.execucao?.confirmacaoPendente && campanha) {
+    const destinoIncerto = estado.execucao.destino || campanha.destinos[0];
+    if (destinoIncerto && campanha.destinos[0] === destinoIncerto) {
+      campanha.destinos.shift();
+      await armazenamento.salvarEstado(estado);
+      await campanhas.registrarResultado(campanha.id, destinoIncerto, 'falhou', '⚠ Publicação não confirmada. O grupo foi ignorado após confirmação do usuário para evitar duplicação.', estado.execucao.textoUsado || '');
+    }
+  }
+  const atualizado = await armazenamento.carregarEstado();
+  const campanhaAtual = atualizado.campanhas.find(c => c.id === atualizado.execucao?.campanhaId) || atualizado.campanhas.find(c => c.status === 'pausada');
+  if (campanhaAtual) campanhaAtual.status = 'ativa';
+  if (campanhaAtual && !campanhaAtual.destinos.length) {
+    campanhaAtual.status = 'concluida';
+    atualizado.proximaPublicacaoEm = 0;
+    atualizado.execucao = { ...(atualizado.execucao || {}), fase: 'concluida', pausada: false, confirmacaoPendente: false, mensagem: 'Campanha concluída. O grupo com resultado incerto foi ignorado para evitar duplicação.', atualizadoEm: Date.now() };
+    await armazenamento.salvarEstado(atualizado);
+    return;
+  }
+  if (atualizado.proximaPublicacaoEm && atualizado.proximaPublicacaoEm > Date.now()) {
+    atualizado.execucao = { ...(atualizado.execucao || {}), fase: 'aguardando', pausada: false, confirmacaoPendente: false, mensagem: 'Campanha retomada. O próximo grupo será iniciado no horário previsto.', atualizadoEm: Date.now(), proximaEm: atualizado.proximaPublicacaoEm };
+    await armazenamento.salvarEstado(atualizado);
+    await chrome.alarms.create('processar-fila-delay', { when: atualizado.proximaPublicacaoEm });
+    return;
+  }
+  atualizado.execucao = { ...(atualizado.execucao || {}), fase: 'preparando', pausada: false, confirmacaoPendente: false, mensagem: 'Campanha retomada. A fila será processada com o intervalo configurado.', atualizadoEm: Date.now() };
+  await armazenamento.salvarEstado(atualizado);
   await processarFila();
 }
 
@@ -290,7 +385,7 @@ async function encerrarFila() {
   const estado = await armazenamento.carregarEstado();
   const campanha = estado.campanhas.find(c => c.id === estado.execucao?.campanhaId) || estado.campanhas.find(c => c.status === 'ativa' || c.status === 'pausada');
   if (campanha) campanha.status = 'encerrada';
-  estado.execucao = { ...(estado.execucao || {}), fase: 'parado', pausada: true, mensagem: 'Campanha encerrada. Nenhum novo grupo será publicado.', atualizadoEm: Date.now() };
+  estado.execucao = { ...(estado.execucao || {}), fase: 'encerrada', pausada: true, proximaEm: 0, mensagem: 'Campanha encerrada. Nenhum novo grupo será iniciado.', atualizadoEm: Date.now() };
   estado.proximaPublicacaoEm = 0;
   await armazenamento.salvarEstado(estado);
   await chrome.alarms.clear('processar-fila-delay');

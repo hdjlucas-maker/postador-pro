@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node tests/smoke.test.js",
+    "test": "node tests/campanhas-validation.test.mjs && node tests/facebook-content.test.mjs && node tests/smoke.test.js",
     "lint": "node scripts/check-syntax.js && node scripts/check-modulos.js",
     "preflight": "node scripts/preflight.js",
     "backup": "node scripts/backup.js",

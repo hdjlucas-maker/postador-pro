@@ -55,12 +55,12 @@ function carregarConfig(env) {
     // campanha é gravado aqui.
     PLAN_LIMITS: {
       trial: {
-        gruposPorDia: num(env.LIMIT_TRIAL_GRUPOS_DIA, 10),
+        gruposPorDia: Math.min(5, num(env.LIMIT_TRIAL_GRUPOS_DIA, 5)),
         campanhasAtivas: num(env.LIMIT_TRIAL_CAMPANHAS, 3),
         destinosPorCampanha: num(env.LIMIT_TRIAL_DESTINOS, 5)
       },
       pro: {
-        gruposPorDia: num(env.LIMIT_PRO_GRUPOS_DIA, 300),
+        gruposPorDia: Math.min(10, num(env.LIMIT_PRO_GRUPOS_DIA, 10)),
         campanhasAtivas: num(env.LIMIT_PRO_CAMPANHAS, 50),
         destinosPorCampanha: num(env.LIMIT_PRO_DESTINOS, 100)
       }
