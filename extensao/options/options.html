@@ -93,13 +93,35 @@
         <label>Nome da campanha</label>
         <input type="text" id="campo-nome" maxlength="100" placeholder="Ex.: Lançamento Produto X">
 
-        <label>Texto da publicação <span class="suave">(aceita Spintax)</span></label>
+        <div class="gerador-ia">
+          <h3>Gerar mensagens com IA grátis</h3>
+          <label for="campo-ia-produto">Produto ou serviço</label>
+          <input type="text" id="campo-ia-produto" maxlength="120" placeholder="Ex.: kit de panelas antiaderentes">
+          <label for="campo-ia-beneficios">Benefícios e fatos reais</label>
+          <textarea id="campo-ia-beneficios" rows="2" maxlength="500" placeholder="Ex.: 5 peças, compatível com fogão a gás, entrega em São Paulo"></textarea>
+          <label for="campo-ia-publico">Público (opcional)</label>
+          <input type="text" id="campo-ia-publico" maxlength="160" placeholder="Ex.: pessoas montando a primeira cozinha">
+          <label for="campo-ia-link">Link da oferta (opcional)</label>
+          <input type="text" id="campo-ia-link" maxlength="300" placeholder="https://...">
+          <div class="linha">
+            <label for="campo-ia-tom">Tom</label>
+            <select id="campo-ia-tom"><option value="amigavel">Amigável</option><option value="direto">Direto</option><option value="entusiasmado">Entusiasmado</option><option value="elegante">Elegante</option></select>
+            <label for="campo-ia-objetivo">Chamada para ação</label>
+            <select id="campo-ia-objetivo"><option value="link">Conhecer a oferta</option><option value="seguir">Seguir página/perfil</option><option value="curtir">Curtir se tiver interesse</option><option value="mensagem">Pedir informações</option></select>
+          </div>
+          <button type="button" id="botao-ia-gerar" class="botao secundario">Gerar 3 variações</button>
+          <p id="ia-status" class="suave" aria-live="polite">Até 10 gerações por conta e 20 no total por dia. Não inclua dados pessoais.</p>
+          <p class="suave">Os dados informados são enviados ao Postador Pro para gerar os textos. Confira cada mensagem e os fatos antes de publicar.</p>
+        </div>
+
+        <label>Mensagens da publicação <span class="suave">(a ferramenta sorteia uma por grupo)</span></label>
         <div class="atalhos-emoji" aria-label="Adicionar emoji">
           <button type="button" data-emoji="😀">😀</button><button type="button" data-emoji="👍">👍</button><button type="button" data-emoji="🔥">🔥</button><button type="button" data-emoji="🎉">🎉</button><button type="button" data-emoji="🚀">🚀</button><button type="button" data-emoji="💰">💰</button><button type="button" data-emoji="✅">✅</button>
         </div>
-        <textarea id="campo-texto" maxlength="5000" rows="5" placeholder="Ex.: {Confira essa oportunidade|Olha que oportunidade incrível|Veja isso}…"></textarea>
-        <p class="suave">Spintax: use <code>{opção 1|opção 2|opção 3}</code>. Uma opção é sorteada a cada grupo e o texto anterior não é repetido quando houver alternativas.</p>
-        <p class="suave" id="contador-texto">0 / 5000</p>
+        <div id="lista-mensagens"></div>
+        <button type="button" id="botao-adicionar-mensagem" class="botao secundario">+ Adicionar outra mensagem</button>
+        <p class="suave">Cada caixa é uma mensagem independente; parágrafos dentro dela ficam juntos. Você também pode usar Spintax, por exemplo <code>{oferta especial|oportunidade imperdível}</code>, para variar uma frase dentro de cada mensagem.</p>
+        <p class="suave" id="contador-texto">0 mensagem(ns)</p>
 
         <label>Imagem (opcional)</label>
         <input type="file" id="campo-imagem" accept="image/*">

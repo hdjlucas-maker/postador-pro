@@ -47,6 +47,7 @@ async function verificarLicencaPeriodicamente() {
 
 let processando = false;
 let abaAutomacaoId = null;
+const CHAVE_ABA_AUTOMACAO = 'postadorProAbaAutomacaoId';
 
 function atrasoDoRitmo(estado) {
   const ritmo = estado.config && estado.config.ritmo;
@@ -229,11 +230,13 @@ async function publicarEmDestino(campanha, destino) {
   // Busca a imagem no IndexedDB.
   let imagemDados = null;
   let imagemTipo = null;
+  let imagemNome = null;
   if (campanha.imagemId) {
     const blob = await armazenamento.buscarImagem(campanha.imagemId);
     if (blob) {
       imagemDados = await blob.arrayBuffer();
       imagemTipo = blob.type || 'image/png';
+      imagemNome = blob.name || '';
     }
   }
 
@@ -256,6 +259,7 @@ async function publicarEmDestino(campanha, destino) {
     texto,
     imagemDados,
     imagemTipo,
+    imagemNome,
     cadenciaMin: CONFIG.CADENCIA_MIN_MS,
     cadenciaMax: CONFIG.CADENCIA_MAX_MS
   }).catch(() => ({ ok: false, erro: 'Não consegui falar com a página do Facebook.' }));
@@ -264,10 +268,18 @@ async function publicarEmDestino(campanha, destino) {
 }
 
 async function abrirAbaFacebook() {
-  if (abaAutomacaoId !== null) {
+  // O service worker MV3 pode ser encerrado entre duas publicações; seu estado
+  // em memória não basta para reutilizar a mesma aba durante toda a campanha.
+  const salvo = await new Promise(resolve => chrome.storage.local.get(CHAVE_ABA_AUTOMACAO, dados => resolve(dados[CHAVE_ABA_AUTOMACAO])));
+  const idSalvo = Number.isInteger(salvo) ? salvo : abaAutomacaoId;
+  if (idSalvo !== null && idSalvo !== undefined) {
     try {
-      const existente = await chrome.tabs.get(abaAutomacaoId);
-      if (existente) return existente;
+      const existente = await chrome.tabs.get(idSalvo);
+      const url = new URL(existente.url || '');
+      if (['www.facebook.com', 'facebook.com', 'web.facebook.com', 'm.facebook.com'].includes(url.hostname.toLowerCase())) {
+        abaAutomacaoId = existente.id;
+        return existente;
+      }
     } catch (_) {
       abaAutomacaoId = null;
     }
@@ -276,6 +288,7 @@ async function abrirAbaFacebook() {
   // sem tomar a tela ou a navegação que a pessoa está usando.
   const aba = await chrome.tabs.create({ url: 'https://www.facebook.com/', active: false });
   abaAutomacaoId = aba.id;
+  await new Promise(resolve => chrome.storage.local.set({ [CHAVE_ABA_AUTOMACAO]: aba.id }, resolve));
   return aba;
 }
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Postador Pro",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "description": "Divulgue seus produtos em grupos do Facebook com agendamento e ritmo controlado.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvXy8QGmPDoMaohjMEzRB/ACP0XUn7t4UQ7XlngvDgbA5cuqAagAlBqEn/jsEvKqJVtWCg47+Qmn+VNPJqo46IgKkaIELz9ie5EIeS5oqpRZ1K5rW5zxOq7O1ggqyB15koQu6xfOHBKSbCZ7C4Cv1dQEFuToWWtCn60Asj7Zk7FsjBFfxw27C8kebb0hTnvgI+UWIY6D2TiDG9TGHPvqBmztnwYbsPqSUK3GDzETv4b7433ivxwj1M5nEw3sourxHUHJbxeCdt4ES7Xn9lmhzd/YvzvveMNVCAhk9OMIOCwJw4YWIKBIoTIStueI2mEOflO+4h8BI0KB/nkm512w9AQIDAQAB",
   "permissions": [

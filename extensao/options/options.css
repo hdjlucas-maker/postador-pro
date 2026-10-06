@@ -44,7 +44,7 @@ h2 { margin: 0 0 12px; font-size: 22px; }
 .suave { color: var(--texto-suave); font-size: 13px; }
 .aviso { background: #fff9e6; border: 1px solid #f5c842; border-radius: var(--raio); padding: 12px; font-size: 13px; }
 label { display: block; font-weight: 600; margin: 14px 0 6px; }
-input[type="text"], input[type="datetime-local"], textarea {
+input[type="text"], input[type="datetime-local"], textarea, select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--borda);
@@ -52,6 +52,15 @@ input[type="text"], input[type="datetime-local"], textarea {
   font-size: 14px;
   font-family: inherit;
 }
+.mensagem-variacao { margin: 10px 0 16px; }
+.mensagem-variacao textarea { display: block; }
+.mensagem-variacao .botao-link { margin-top: 6px; }
+.gerador-ia { margin: 16px 0 20px; padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: #f8fbff; }
+.gerador-ia h3 { margin: 0 0 8px; }
+.gerador-ia label { margin: 10px 0 4px; }
+.gerador-ia .linha { align-items: end; justify-content: initial; flex-wrap: wrap; }
+.gerador-ia .linha label { margin: 0; }
+.gerador-ia .linha select { flex: 1 1 180px; min-width: 0; }
 input[type="file"] { font-size: 13px; }
 .botao {
   padding: 10px 18px;

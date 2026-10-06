@@ -119,7 +119,40 @@ function botaoPublicarDoDialog(dialogo) {
   }) || null;
 }
 
-async function anexarImagem(dados, tipo) {
+function extensaoDaImagem(tipo) {
+  return ({ 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' })[String(tipo || '').toLowerCase()] || '.img';
+}
+
+function nomeSeguroDaImagem(nome, tipo) {
+  const extensao = extensaoDaImagem(tipo);
+  let seguro = String(nome || '').split(/[\\/]/).pop().replace(/[^\p{L}\p{N}._-]/gu, '_');
+  if (!seguro || seguro === '.' || seguro === '..') seguro = 'imagem';
+  const ponto = seguro.lastIndexOf('.');
+  const atual = ponto > 0 ? seguro.slice(ponto).toLowerCase() : '';
+  const extensoesSuportadas = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+  if (extensoesSuportadas.includes(atual)) seguro = seguro.slice(0, ponto);
+  return `${seguro}${extensao}`;
+}
+
+function erroDeUpload(dialogo) {
+  const texto = (dialogo?.innerText || '').replace(/\s+/g, ' ').trim();
+  return /(?:não é possível|nao e possivel|não foi possível|nao foi possivel|falha ao|erro ao).{0,100}(?:carregar|enviar|arquivo|imagem)|(?:could not|couldn't|can't|cannot).{0,80}(?:upload|load|file)/i.exec(texto)?.[0] || '';
+}
+
+async function aguardarUploadImagem(dialogo, nome) {
+  const inicio = Date.now();
+  while (Date.now() - inicio < 30000) {
+    const erro = erroDeUpload(dialogo);
+    if (erro) return { ok: false, erro: `O Facebook recusou a imagem “${nome}”: ${erro}.` };
+    const enviando = dialogo.querySelector('[aria-busy="true"], [role="progressbar"]') ||
+      Array.from(dialogo.querySelectorAll('[aria-label], [role="status"]')).some(el => /upload|carregando|enviando/i.test(`${el.getAttribute('aria-label') || ''} ${el.textContent || ''}`));
+    if (Date.now() - inicio >= 5000 && !enviando) return { ok: true };
+    await esperar(500);
+  }
+  return { ok: false, erro: `O envio da imagem “${nome}” não foi confirmado após 30 segundos. Nenhuma publicação foi enviada.` };
+}
+
+async function anexarImagem(dados, tipo, nomeOriginal) {
   const editor = primeiro(SELETORES.compositor);
   const dialogo = editor?.closest('[role="dialog"]');
   if (!dialogo || !dialogoNovaPublicacao(dialogo)) return false;
@@ -135,11 +168,19 @@ async function anexarImagem(dados, tipo) {
   }
   if (!input) return false;
 
-  const blob = new Blob([dados], { type: tipo || 'image/png' });
-  const arquivo = new File([blob], 'postador.png', { type: blob.type || 'image/png' });
+  const mime = String(tipo || '').toLowerCase();
+  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime)) return false;
+  const blob = new Blob([dados], { type: mime });
+  const nome = nomeSeguroDaImagem(nomeOriginal, mime);
+  const arquivo = new File([blob], nome, { type: mime, lastModified: Date.now() });
   const transfer = new DataTransfer();
   transfer.items.add(arquivo);
-  input.files = transfer.files;
+  try {
+    input.files = transfer.files;
+  } catch (_) {
+    return false;
+  }
+  input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
   return true;
 }
@@ -150,7 +191,7 @@ function detectarAvisoFacebook() {
   return sinais.some(sinal => corpo.includes(sinal));
 }
 
-async function publicar({ texto, imagemDados, imagemTipo, cadenciaMin, cadenciaMax }) {
+async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMin, cadenciaMax }) {
   if (!location.pathname.includes('/groups/')) {
     return { ok: false, erro: 'A aba atual não é uma página de grupo do Facebook.' };
   }
@@ -177,12 +218,12 @@ async function publicar({ texto, imagemDados, imagemTipo, cadenciaMin, cadenciaM
 
   if (imagemDados) {
     reportarStatus('anexando_imagem', 'Anexando imagem à nova postagem.');
-    const anexou = await anexarImagem(imagemDados, imagemTipo);
+    const anexou = await anexarImagem(imagemDados, imagemTipo, imagemNome);
     if (!anexou) {
-      return { ok: false, erro: 'Não encontrei o botão de anexar imagem.' };
+      return { ok: false, erro: 'Não consegui preparar a imagem para anexar. Confira se o arquivo é PNG, JPEG, WebP ou GIF. Nenhuma publicação foi enviada.' };
     }
-    // Espera o upload da imagem.
-    await esperar(3000);
+    const envioImagem = await aguardarUploadImagem(compositor.closest('[role="dialog"]'), nomeSeguroDaImagem(imagemNome, imagemTipo));
+    if (!envioImagem.ok) return { ok: false, erro: envioImagem.erro };
   }
 
   const dialogo = compositor.closest('[role="dialog"]');

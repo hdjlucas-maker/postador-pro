@@ -148,6 +148,10 @@ async function carregarPlanos() {
   return chamarApi('/api/extensao/planos');
 }
 
+async function gerarTextos(dados) {
+  return chamarApi('/api/extensao/gerar-textos', { metodo: 'POST', corpo: dados });
+}
+
 export {
   chamarApi,
   verificarLicenca,
@@ -157,6 +161,7 @@ export {
   criarCheckout,
   reconciliar,
   carregarPlanos,
+  gerarTextos,
   acessoPermitido,
   permaneceCarencia
 };

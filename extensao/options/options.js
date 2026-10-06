@@ -10,7 +10,56 @@ const $ = id => document.getElementById(id);
 let imagemSelecionada = null; // { id, blob }
 let campanhaEditando = null;
 let salvandoCampanha = false;
+let geracaoIaEmCurso = false;
 let ritmoAtual = { minMs: CONFIG.DELAY_ENTRE_POSTS_MIN * 1000, maxMs: CONFIG.DELAY_ENTRE_POSTS_MAX * 1000 };
+let mensagemEmFoco = null;
+
+function obterCamposMensagens() {
+  return Array.from(document.querySelectorAll('[data-mensagem]'));
+}
+
+function obterMensagens() {
+  return obterCamposMensagens().map(campo => campo.value.trim()).filter(Boolean);
+}
+
+function renderizarCamposMensagens(textos = ['']) {
+  const lista = $('lista-mensagens');
+  lista.replaceChildren();
+  const itens = (textos.length ? textos : ['']).slice(0, CONFIG.MAX_TEXTOS);
+  itens.forEach((texto, indice) => {
+    const linha = document.createElement('div');
+    linha.className = 'mensagem-variacao';
+    const campo = document.createElement('textarea');
+    campo.dataset.mensagem = '';
+    campo.rows = 5;
+    campo.maxLength = CONFIG.MAX_TEXT_LENGTH;
+    campo.placeholder = `Variação ${indice + 1}: escreva uma mensagem completa`;
+    campo.value = texto;
+    campo.addEventListener('focus', () => { mensagemEmFoco = campo; });
+    campo.addEventListener('input', () => { atualizarContadorTextos(); atualizarPreview(); });
+    linha.append(campo);
+    if (itens.length > 1) {
+      const remover = document.createElement('button');
+      remover.type = 'button';
+      remover.className = 'botao-link perigo';
+      remover.textContent = `Remover variação ${indice + 1}`;
+      remover.addEventListener('click', () => {
+        renderizarCamposMensagens(obterCamposMensagens().filter(item => item !== campo).map(item => item.value));
+      });
+      linha.append(remover);
+    }
+    lista.append(linha);
+  });
+  mensagemEmFoco = obterCamposMensagens()[0] || null;
+  $('botao-adicionar-mensagem').disabled = obterCamposMensagens().length >= CONFIG.MAX_TEXTOS;
+  atualizarContadorTextos();
+}
+
+function atualizarContadorTextos() {
+  const mensagens = obterMensagens();
+  const maior = mensagens.reduce((tamanho, texto) => Math.max(tamanho, texto.length), 0);
+  $('contador-texto').textContent = `${mensagens.length} mensagem(ns) · maior: ${maior} / ${CONFIG.MAX_TEXT_LENGTH} caracteres`;
+}
 
 function mostrar(section) {
   $('secao-boas-vindas').classList.toggle('oculta', section !== 'boas-vindas');
@@ -183,10 +232,17 @@ $('botao-salvar-ritmo').addEventListener('click', async () => {
 
 async function abrirForm(nova) {
   $('titulo-form').textContent = nova ? 'Nova campanha' : 'Editar campanha';
+  $('campo-ia-produto').value = '';
+  $('campo-ia-beneficios').value = '';
+  $('campo-ia-publico').value = '';
+  $('campo-ia-link').value = '';
+  $('campo-ia-tom').value = 'amigavel';
+  $('campo-ia-objetivo').value = 'link';
+  $('ia-status').textContent = 'Até 10 gerações por conta e 20 no total por dia. Não inclua dados pessoais.';
   if (nova) {
     campanhaEditando = null;
     $('campo-nome').value = '';
-    $('campo-texto').value = '';
+    renderizarCamposMensagens(['']);
     $('campo-destinos').value = '';
     $('campo-agendar').checked = false;
     $('campo-responsabilidade').checked = false;
@@ -211,7 +267,7 @@ async function editarCampanha(id) {
   campanhaEditando = campanha;
   await abrirForm(false);
   $('campo-nome').value = campanha.nome || '';
-  $('campo-texto').value = (campanha.textos || []).join('\n');
+  renderizarCamposMensagens(campanha.textos || ['']);
   $('campo-destinos').value = (campanha.destinosOriginais || campanha.destinos || []).join('\n');
   $('contador-destinos').textContent = `${(campanha.destinosOriginais || campanha.destinos || []).length} destino(s)`;
   $('campo-agendar').checked = Boolean(campanha.agendadoPara);
@@ -239,7 +295,7 @@ async function reutilizarCampanha(id) {
   campanhaEditando = null;
   await abrirForm(true);
   $('campo-nome').value = `${original.nome} (cópia)`;
-  $('campo-texto').value = (original.textos || []).join('\n');
+  renderizarCamposMensagens(original.textos || ['']);
   $('campo-destinos').value = (original.destinosOriginais || original.destinos || []).join('\n');
   $('campo-responsabilidade').checked = false;
   if (original.imagemId) {
@@ -251,7 +307,7 @@ async function reutilizarCampanha(id) {
     }
   }
   $('contador-destinos').textContent = `${(original.destinosOriginais || original.destinos || []).length} destino(s)`;
-  $('contador-texto').textContent = `${$('campo-texto').value.length} / ${CONFIG.MAX_TEXT_LENGTH}`;
+  atualizarContadorTextos();
   atualizarPreview();
   mostrar('form');
 }
@@ -260,7 +316,8 @@ $('atalho-nova').addEventListener('click', () => abrirForm(true));
 $('atalho-feedback').addEventListener('click', () => chrome.tabs.create({ url: `${CONFIG.API_BASE}/?origem=extensao#avaliar` }));
 document.querySelectorAll('[data-emoji]').forEach(botao => {
   botao.addEventListener('click', () => {
-    const campo = $('campo-texto');
+    const campo = mensagemEmFoco || obterCamposMensagens()[0];
+    if (!campo) return;
     const emoji = botao.dataset.emoji;
     const inicio = campo.selectionStart ?? campo.value.length;
     const fim = campo.selectionEnd ?? campo.value.length;
@@ -276,8 +333,49 @@ $('campo-nome').addEventListener('input', atualizarPreview);
 $('campo-agendar').addEventListener('change', () => { $('campo-horario').classList.toggle('oculta', !$('campo-agendar').checked); atualizarPreview(); });
 $('campo-horario').addEventListener('input', atualizarPreview);
 
-$('campo-texto').addEventListener('input', () => {
-  $('contador-texto').textContent = `${$('campo-texto').value.length} / ${CONFIG.MAX_TEXT_LENGTH}`; atualizarPreview();
+$('botao-adicionar-mensagem').addEventListener('click', () => {
+  const mensagens = obterCamposMensagens().map(campo => campo.value);
+  if (mensagens.length >= CONFIG.MAX_TEXTOS) return;
+  mensagens.push('');
+  renderizarCamposMensagens(mensagens);
+  const novoCampo = obterCamposMensagens().at(-1);
+  if (novoCampo) { mensagemEmFoco = novoCampo; novoCampo.focus(); }
+});
+
+$('botao-ia-gerar').addEventListener('click', async () => {
+  if (geracaoIaEmCurso) return;
+  const produto = $('campo-ia-produto').value.trim();
+  if (!produto) {
+    $('ia-status').textContent = 'Informe o produto ou serviço para gerar as mensagens.';
+    $('campo-ia-produto').focus();
+    return;
+  }
+  if (obterMensagens().length && !confirm('A IA vai substituir as mensagens atuais por três sugestões. Continuar?')) return;
+
+  geracaoIaEmCurso = true;
+  const botao = $('botao-ia-gerar');
+  botao.disabled = true;
+  botao.textContent = 'Gerando…';
+  $('ia-status').textContent = 'Gerando três sugestões. Isso pode levar alguns segundos.';
+  try {
+    const resposta = await licenca.gerarTextos({
+      produto,
+      beneficios: $('campo-ia-beneficios').value.trim(),
+      publico: $('campo-ia-publico').value.trim(),
+      link: $('campo-ia-link').value.trim(),
+      tom: $('campo-ia-tom').value,
+      objetivo: $('campo-ia-objetivo').value
+    });
+    renderizarCamposMensagens(resposta.textos);
+    atualizarPreview();
+    $('ia-status').textContent = 'Três sugestões prontas. Revise e edite cada uma antes de iniciar a campanha.';
+  } catch (erro) {
+    $('ia-status').textContent = erro.message || 'Não foi possível gerar as mensagens agora.';
+  } finally {
+    geracaoIaEmCurso = false;
+    botao.disabled = false;
+    botao.textContent = 'Gerar 3 variações';
+  }
 });
 
 $('campo-destinos').addEventListener('input', () => {
@@ -317,7 +415,8 @@ function atualizarPreview() {
   $('preview-grupos').textContent = destinos.length;
   const nomeImagem = imagemSelecionada?.blob?.name || '';
   $('preview-imagem-texto').textContent = imagemSelecionada ? (nomeImagem || 'configurada') : 'não configurada';
-  $('preview-texto').textContent = $('campo-texto').value.trim() ? 'configurado' : 'não configurado';
+  const quantidadeTextos = obterMensagens().length;
+  $('preview-texto').textContent = quantidadeTextos ? `${quantidadeTextos} variação(ões)` : 'não configurado';
   const min = Math.round(ritmoAtual.minMs / 60000);
   const max = Math.round(ritmoAtual.maxMs / 60000);
   $('preview-intervalo').textContent = `${min}–${max} minutos`;
@@ -350,7 +449,7 @@ async function salvarCampanha(modo = 'salvar') {
     const limites = estado.licenca?.limites || null;
     const dadosCampanha = {
       nome: $('campo-nome').value,
-      textos: [$('campo-texto').value],
+      textos: obterMensagens(),
       destinos,
       destinosOriginais: destinos,
       imagemId: imagemSelecionada ? imagemSelecionada.id : null,
