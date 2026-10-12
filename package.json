@@ -1,25 +1,15 @@
 {
   "name": "postador-pro",
-  "version": "1.0.0",
+  "version": "1.0.25",
   "private": true,
-  "description": "Extensão de navegador para divulgação em grupos do Facebook, com API de assinatura via InfinitePay",
-  "main": "server.js",
+  "description": "Extensão de navegador para divulgação em grupos do Facebook, com API de assinatura em Cloudflare Workers e cobrança pela InfinitePay",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "test": "node tests/campanhas-validation.test.mjs && node tests/facebook-content.test.mjs && node tests/smoke.test.js",
-    "lint": "node scripts/check-syntax.js && node scripts/check-modulos.js",
-    "preflight": "node scripts/preflight.js",
-    "backup": "node scripts/backup.js",
-    "verificar:backup": "node scripts/testar-backup.js"
+    "test": "node tests/campanhas-validation.test.mjs && node tests/facebook-content.test.mjs",
+    "test:worker": "npm --prefix worker test",
+    "verificar:extensao": "node scripts/empacotar-extensao.js --verificar",
+    "empacotar": "node scripts/empacotar-extensao.js"
   },
   "engines": {
     "node": ">=18.17.0"
-  },
-  "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "nedb-promises": "^6.2.3"
   }
 }
