@@ -1,5 +1,6 @@
 'use strict';
 
+import { getCookie } from 'hono/cookie';
 import * as crypto from './crypto.js';
 import * as configMod from './config.js';
 import * as db from './db.js';
@@ -142,7 +143,7 @@ function encerrarSessao(c) {
 
 async function usuarioAtual(c) {
   const cfg = configMod.config(c.env);
-  const token = c.req.cookie(cfg.SESSION_COOKIE);
+  const token = getCookie(c, cfg.SESSION_COOKIE);
   if (!token) return null;
   return usuarioPorToken(c.env, token);
 }

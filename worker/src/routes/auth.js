@@ -1,6 +1,7 @@
 'use strict';
 
 import { Hono } from 'hono';
+import { getCookie } from 'hono/cookie';
 import * as crypto from '../crypto.js';
 import * as configMod from '../config.js';
 import * as db from '../db.js';
@@ -83,7 +84,7 @@ function criar() {
   app.post('/logout', async c => {
     const env = c.env;
     const cfg = configMod.config(env);
-    const token = c.req.cookie(cfg.SESSION_COOKIE);
+    const token = getCookie(c, cfg.SESSION_COOKIE);
     if (token) await db.sessions_removerPorTokenHash(env, await crypto.sha256Hex(token));
     auth.encerrarSessao(c);
     return c.json({ ok: true });

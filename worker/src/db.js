@@ -124,6 +124,12 @@ const COLUNAS_USUARIO = {
   criadoEm: 'criado_em'
 };
 
+// Colunas que guardam número de verdade. `iso()` trata qualquer número como
+// carimbo de tempo em milissegundos, então sem esta lista o `1` de
+// `loginFalhas` virava "1970-01-01T00:00:00.001Z", o contador lia 0 de volta e
+// a trava de conta por tentativas erradas nunca disparava.
+const COLUNAS_INTEIRAS = new Set(['login_falhas']);
+
 function set(campos) {
   const partes = [];
   const valores = [];
@@ -131,8 +137,14 @@ function set(campos) {
     const coluna = COLUNAS_USUARIO[chave];
     if (!coluna) throw new Error(`coluna de usuário desconhecida: ${chave}`);
     partes.push(`${coluna} = ?`);
-    // Datas (Date) viram ISO antes de ir ao banco; o D1 não aceita objeto Date.
-    valores.push(typeof valor === 'boolean' ? (valor ? 1 : 0) : iso(valor));
+    if (typeof valor === 'boolean') {
+      valores.push(valor ? 1 : 0);
+    } else if (COLUNAS_INTEIRAS.has(coluna)) {
+      valores.push(Number(valor));
+    } else {
+      // Datas (Date) viram ISO antes de ir ao banco; o D1 não aceita objeto Date.
+      valores.push(iso(valor));
+    }
   }
   return { sql: partes.join(', '), valores };
 }

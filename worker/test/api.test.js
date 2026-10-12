@@ -7,27 +7,68 @@ import { beforeAll, describe, expect, it } from 'vitest';
 const ORIGEM = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
 const OUTRA_ORIGEM = 'chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba';
 
-function cookies(resposta) {
-  const bruto = resposta.headers.get('set-cookie') || '';
-  return bruto
-    .split(/,(?=[^;]+?=)/)
-    .map(parte => parte.trim().split(';')[0])
+const BASE = 'https://api.postador.test';
+
+// Recebe o `Headers` da resposta (é assim que os testes chamam), e não a
+// resposta inteira. `getSetCookie` devolve um item por cookie, sem precisar
+// quebrar a string por vírgula.
+function cookies(headers) {
+  return headers
+    .getSetCookie()
+    .map(parte => parte.split(';')[0].trim())
     .filter(Boolean);
 }
 
-function parDe(rotas) {
+function parDe(headers) {
   const mapa = new Map();
-  for (const par of cookies(rotas)) {
-    const [nome, valor] = par.split('=');
-    mapa.set(nome, valor);
+  for (const par of cookies(headers)) {
+    const indice = par.indexOf('=');
+    mapa.set(par.slice(0, indice), par.slice(indice + 1));
   }
   return mapa;
 }
 
+// Cabeçalho `Cookie` com sessão e CSRF, como o navegador devolveria. O servidor
+// só aceita escrita com os dois: o cookie de CSRF e o header com o mesmo valor.
+function cookieDe(headers) {
+  const mapa = parDe(headers);
+  return `postador_session=${mapa.get('postador_session')}; postador_csrf=${mapa.get('postador_csrf')}`;
+}
+
+let ipSeq = 0;
+const novoIp = () => `10.1.${Math.floor(ipSeq / 250)}.${(ipSeq++ % 250) + 1}`;
+
+// Um navegador de verdade manda `Origin` em toda escrita e, antes de escrever,
+// já recebeu o cookie de CSRF de `GET /api/config`. O helper reproduz os dois
+// passos, senão o servidor (corretamente) barra a chamada.
+//
+// - Quem passa `Cookie` está montando a requisição à mão (é o caso dos testes
+//   de CSRF), então o helper não acrescenta o par cookie + header.
+// - Rotas de `/extensao/` não usam cookie: o helper também não acrescenta.
+// - Cada chamada sai de um IP diferente (`cf-connecting-ip`), para que o limite
+//   de cadastro de um teste não derrube o teste seguinte. Os testes de limite
+//   fixam o IP de propósito.
 async function post(caminho, corpo, cabecalhos = {}) {
-  return SELF.fetch(`https://api.postador.test${caminho}`, {
+  const cabecalhosFinais = {
+    'Content-Type': 'application/json',
+    Origin: BASE,
+    'cf-connecting-ip': novoIp(),
+    ...cabecalhos
+  };
+
+  const precisaCsrf = !caminho.startsWith('/api/extensao/') && !cabecalhosFinais.Cookie;
+  if (precisaCsrf) {
+    const config = await SELF.fetch(`${BASE}/api/config`, {
+      headers: { 'cf-connecting-ip': cabecalhosFinais['cf-connecting-ip'] }
+    });
+    const token = parDe(config.headers).get('postador_csrf');
+    cabecalhosFinais.Cookie = `postador_csrf=${token}`;
+    cabecalhosFinais['x-csrf-token'] = token;
+  }
+
+  return SELF.fetch(`${BASE}${caminho}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...cabecalhos },
+    headers: cabecalhosFinais,
     body: JSON.stringify(corpo)
   });
 }
@@ -82,7 +123,7 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect(rotas.get('postador_csrf')).toBeTruthy();
 
     const login = await post('/api/login', { email, senha: 'senha-super-segura' }, {
-      Cookie: `postador_session=${rotas.get('postador_session')}`,
+      Cookie: cookieDe(cadastro.headers),
       'x-csrf-token': rotas.get('postador_csrf')
     });
     expect(login.status).toBe(200);
@@ -136,7 +177,12 @@ describe('API do Postador Pro sobre Workers + D1', () => {
   it('limita o cadastro por rate limit no D1', async () => {
     const respostas = [];
     for (let i = 0; i < 7; i += 1) {
-      respostas.push(await post('/api/register', { nome: 'Teste Limite', email: novoEmail(), senha: 'senha-super-segura' }));
+      // IP fixo de propósito: o limite de cadastro é por IP.
+      respostas.push(await post(
+        '/api/register',
+        { nome: 'Teste Limite', email: novoEmail(), senha: 'senha-super-segura' },
+        { 'cf-connecting-ip': '10.9.9.9' }
+      ));
     }
 
     // `RATE_LIMIT_REGISTRO` é 5 na configuração de teste.
@@ -206,7 +252,13 @@ describe('API do Postador Pro sobre Workers + D1', () => {
   });
 
   it('recusa requisição sem origem, sem referer e sem token', async () => {
-    const resposta = await post('/api/login', { email: 'x@y.pro', senha: 'senha-super-segura' });
+    // `SELF.fetch` direto: o helper `post` sempre manda `Origin`, e aqui o que
+    // se testa é justamente a ausência dele.
+    const resposta = await SELF.fetch(`${BASE}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'x@y.pro', senha: 'senha-super-segura' })
+    });
     const dados = await resposta.json();
 
     expect(resposta.status).toBe(403);
@@ -224,7 +276,7 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect(semCsrf.status).toBe(403);
 
     const comCsrf = await post('/api/login', { email, senha: 'senha-super-segura' }, {
-      Cookie: `postador_session=${rotas.get('postador_session')}`,
+      Cookie: cookieDe(cadastro.headers),
       'x-csrf-token': rotas.get('postador_csrf')
     });
     expect(comCsrf.status).toBe(200);
@@ -261,8 +313,11 @@ describe('API do Postador Pro sobre Workers + D1', () => {
 
     expect(cadastrado.status).toBe(200);
     expect(desconhecido.status).toBe(200);
-    expect((await desconhecido.json()).mensagem).toBe((await cadastrado.json()).mensagem);
-    expect((await desconhecido.json()).linkDev).toBeUndefined();
+    // O corpo de uma resposta só pode ser lido uma vez.
+    const dadosDesconhecido = await desconhecido.json();
+    const dadosCadastrado = await cadastrado.json();
+    expect(dadosDesconhecido.mensagem).toBe(dadosCadastrado.mensagem);
+    expect(dadosDesconhecido.linkDev).toBeUndefined();
   });
 
   it('rejeita token de redefinição repetido', async () => {
@@ -312,7 +367,7 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     const email = novoEmail();
     const cadastro = await post('/api/register', { nome: 'Marcos Teixeira', email, senha: 'senha-super-segura' });
     const rotas = parDe(cadastro.headers);
-    const cookie = `postador_session=${rotas.get('postador_session')}`;
+    const cookie = cookieDe(cadastro.headers);
     const csrf = rotas.get('postador_csrf');
 
     const exportar = await SELF.fetch('https://api.postador.test/api/me/dados', { headers: { Cookie: cookie } });

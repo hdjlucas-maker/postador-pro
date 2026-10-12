@@ -1,5 +1,6 @@
 'use strict';
 
+import { getCookie, setCookie } from 'hono/cookie';
 import * as crypto from './crypto.js';
 import { sha256Hex, novoToken } from './crypto.js';
 import * as configMod from './config.js';
@@ -130,6 +131,11 @@ function aplicarOrigem() {
     const env = c.env;
     const path = new URL(c.req.url).pathname;
     if (ehWebhook(path)) return next();
+    // Login e cadastro da extensão autenticam por e-mail e senha no corpo, não
+    // por cookie de sessão, então não há CSRF possível aqui. Quem decide se a
+    // resposta é legível é a allowlist de CORS: fora de `EXTENSAO_IDS` o
+    // navegador não entrega a resposta à página.
+    if (ehRotaDeExtensao(path)) return next();
 
     const origem = c.req.header('origin');
     const permitido = configMod.baseUrl(env, c.req.raw);
@@ -193,7 +199,7 @@ function aplicarCsrf() {
     if (ehRotaDeExtensao(path)) return next();
 
     const cfg = configMod.config(c.env);
-    const cookie = c.req.cookie(cfg.CSRF_COOKIE);
+    const cookie = getCookie(c, cfg.CSRF_COOKIE);
     const header = c.req.header(cfg.CSRF_HEADER);
 
     if (!cookie || !header) {
@@ -222,11 +228,11 @@ function opcoesCookie(cfg, base) {
  * existe mais o caso de `http://localhost:3000` do servidor local.
  */
 function definirCookie(c, nome, valor, maxAgeSegundos) {
-  c.setCookie(nome, valor, { ...opcoesCookie(), httpOnly: true, maxAge: maxAgeSegundos });
+  setCookie(c, nome, valor, { ...opcoesCookie(), httpOnly: true, maxAge: maxAgeSegundos });
 }
 
 function definirCookieLegivel(c, nome, valor, maxAgeSegundos) {
-  c.setCookie(nome, valor, { ...opcoesCookie(), httpOnly: false, maxAge: maxAgeSegundos });
+  setCookie(c, nome, valor, { ...opcoesCookie(), httpOnly: false, maxAge: maxAgeSegundos });
 }
 
 function emitirCsrf(c) {
@@ -242,12 +248,12 @@ function rotacionarCsrf(c) {
 
 function assegurarCsrf(c) {
   const cfg = configMod.config(c.env);
-  if (c.req.cookie(cfg.CSRF_COOKIE)) return;
+  if (getCookie(c, cfg.CSRF_COOKIE)) return;
   emitirCsrf(c);
 }
 
 function encerrarCookie(c, nome) {
-  c.setCookie(nome, '', { ...opcoesCookie(), httpOnly: true, maxAge: 0 });
+  setCookie(c, nome, '', { ...opcoesCookie(), httpOnly: true, maxAge: 0 });
 }
 
 /**
