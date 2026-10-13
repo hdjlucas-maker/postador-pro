@@ -71,23 +71,74 @@ async function esperarElemento(seletores, timeoutMs = 15000) {
   return null;
 }
 
-// Insere o texto no editor do compositor confirmado.
-async function digitarTexto(elemento, texto, cadenciaMin = 35, cadenciaMax = 95) {
-  elemento.focus();
-  // O editor do Facebook é controlado por React: alterar apenas textContent
-  // muda a tela, mas pode não atualizar o estado interno do compositor.
-  // execCommand gera a mesma entrada que o editor reconhece.
-  document.execCommand('selectAll', false, null);
-  document.execCommand('delete', false, null);
-  const inserido = document.execCommand('insertText', false, texto);
-  if (!inserido || !(elemento.textContent || '').includes(String(texto).slice(0, 20))) {
-    elemento.textContent = texto;
-    elemento.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: texto }));
+// O editor do Facebook é controlado por React/Lexical: alterar apenas
+// textContent muda a tela, mas não o estado interno, e o botão Publicar
+// continua desabilitado. Por isso o texto só conta como inserido depois de
+// conferir que ele apareceu no editor.
+function textoNoEditor(elemento, texto) {
+  const linha = String(texto || '').split('\n').find(parte => parte.trim()) || '';
+  const amostra = linha.trim().slice(0, 20);
+  return !amostra || String(elemento.textContent || '').includes(amostra);
+}
+
+function selecionarConteudo(elemento) {
+  try {
+    const selecao = typeof getSelection === 'function' ? getSelection() : null;
+    if (!selecao || typeof document.createRange !== 'function') return;
+    const faixa = document.createRange();
+    faixa.selectNodeContents(elemento);
+    selecao.removeAllRanges();
+    selecao.addRange(faixa);
+  } catch (_) {
+    // A seleção é só um reforço; as estratégias abaixo continuam valendo.
   }
-  // Mantém uma pequena cadência antes de procurar o botão, permitindo que o
-  // Facebook processe a entrada e habilite Publicar.
-  await esperar(Math.floor(Math.random() * (cadenciaMax - cadenciaMin + 1)) + cadenciaMin);
-  return true;
+}
+
+// Tenta três formas de entrada, da mais simples à que não depende de a aba
+// estar com foco, e confere o resultado depois de cada uma.
+async function digitarTexto(elemento, texto, cadenciaMin = 35, cadenciaMax = 95) {
+  const pausa = () => esperar(Math.floor(Math.random() * (cadenciaMax - cadenciaMin + 1)) + cadenciaMin);
+  elemento.focus();
+  selecionarConteudo(elemento);
+
+  // 1. execCommand: a mesma entrada que o editor reconhece, exige foco na aba.
+  try {
+    document.execCommand('selectAll', false, null);
+    document.execCommand('delete', false, null);
+    document.execCommand('insertText', false, texto);
+  } catch (_) {
+    // Segue para a próxima estratégia.
+  }
+  await pausa();
+  if (textoNoEditor(elemento, texto)) return { ok: true, metodo: 'execCommand' };
+
+  // 2. Colar: o editor trata o evento paste mesmo sem a aba em foco.
+  if (typeof DataTransfer === 'function' && typeof ClipboardEvent === 'function' && elemento.dispatchEvent) {
+    try {
+      const transferencia = new DataTransfer();
+      transferencia.setData('text/plain', texto);
+      selecionarConteudo(elemento);
+      elemento.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transferencia, bubbles: true, cancelable: true, composed: true }));
+    } catch (_) {
+      // Segue para a próxima estratégia.
+    }
+    await esperar(400);
+    if (textoNoEditor(elemento, texto)) return { ok: true, metodo: 'paste' };
+  }
+
+  // 3. beforeinput: o evento que o Lexical usa para inserir texto.
+  if (typeof InputEvent === 'function' && elemento.dispatchEvent) {
+    try {
+      selecionarConteudo(elemento);
+      elemento.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: texto, bubbles: true, cancelable: true, composed: true }));
+    } catch (_) {
+      // Sem mais estratégias.
+    }
+    await esperar(400);
+    if (textoNoEditor(elemento, texto)) return { ok: true, metodo: 'beforeinput' };
+  }
+
+  return { ok: false };
 }
 
 function visivel(elemento) {
@@ -191,6 +242,46 @@ function detectarAvisoFacebook() {
   return sinais.some(sinal => corpo.includes(sinal));
 }
 
+function rotuloDe(elemento) {
+  try {
+    return String((elemento.getAttribute && elemento.getAttribute('aria-label')) || elemento.innerText || elemento.textContent || '')
+      .replace(/\s+/g, ' ').trim().slice(0, 50);
+  } catch (_) {
+    return '';
+  }
+}
+
+async function esperarPaginaPronta(timeoutMs = 10000) {
+  const inicio = Date.now();
+  while (document.readyState && document.readyState !== 'complete' && Date.now() - inicio < timeoutMs) {
+    await esperar(250);
+  }
+}
+
+// Resumo do que a página mostra, anexado ao erro quando o compositor não é
+// encontrado. Serve para descobrir o que mudou no Facebook sem abrir o
+// console. Guarda só rótulos curtos de botões e títulos de diálogo.
+function diagnosticarPagina(rotuloGatilho) {
+  try {
+    const dialogos = Array.from(document.querySelectorAll('[role="dialog"]') || []).slice(0, 4).map(dialogo => {
+      const titulo = dialogo.querySelector && dialogo.querySelector('[role="heading"], h1, h2, h3');
+      const editaveis = dialogo.querySelectorAll ? dialogo.querySelectorAll('[contenteditable="true"]').length : 0;
+      return `"${titulo ? rotuloDe(titulo) : ''}" editáveis=${editaveis}`;
+    });
+    const rotulos = [];
+    for (const botao of document.querySelectorAll('[role="button"], button')) {
+      if (botao.closest && botao.closest('article')) continue;
+      const rotulo = rotuloDe(botao);
+      if (rotulo && /escrev|write|publica|post|cri|create|discuss|foto|photo/i.test(rotulo) && !rotulos.includes(rotulo)) rotulos.push(rotulo);
+      if (rotulos.length >= 12) break;
+    }
+    return `Diagnóstico: visibilidade=${document.visibilityState || 'n/d'}; foco=${typeof document.hasFocus === 'function' ? document.hasFocus() : 'n/d'}; pronto=${document.readyState || 'n/d'}; ` +
+      `gatilho="${rotuloGatilho || 'nenhum'}"; diálogos=[${dialogos.join(' | ')}]; botões=[${rotulos.join(' | ')}]`.slice(0, 700);
+  } catch (erro) {
+    return `Diagnóstico indisponível: ${String(erro && erro.message || erro)}`;
+  }
+}
+
 async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMin, cadenciaMax }) {
   if (!location.pathname.includes('/groups/')) {
     return { ok: false, erro: 'A aba atual não é uma página de grupo do Facebook.' };
@@ -199,14 +290,19 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
   // Na página de grupo o campo de texto só aparece depois de clicar em
   // "Escreva algo...". Primeiro tenta o campo já aberto; se não existir,
   // abre o compositor e só então procura o contenteditable.
+  await esperarPaginaPronta();
   let compositor = primeiro(SELETORES.compositor);
-  if (!compositor) {
+  let rotuloGatilho = '';
+  for (let tentativa = 0; tentativa < 2 && !compositor; tentativa += 1) {
     const gatilho = elementoPorTexto(['escreva algo', 'write something', 'criar publicação', 'create post']);
-    if (gatilho) gatilho.click();
-    compositor = await esperarElemento(SELETORES.compositor, 15000);
+    if (gatilho) {
+      rotuloGatilho = rotuloDe(gatilho);
+      gatilho.click();
+    }
+    compositor = await esperarElemento(SELETORES.compositor, 8000);
   }
   if (!compositor) {
-    return { ok: false, erro: 'Compositor não encontrado. Nenhuma publicação foi enviada. A fila foi pausada.' };
+    return { ok: false, erro: `Compositor não encontrado. Nenhuma publicação foi enviada. A fila foi pausada. ${diagnosticarPagina(rotuloGatilho)}` };
   }
 
   if (!dialogoNovaPublicacao(compositor.closest('[role="dialog"]'))) {
@@ -214,7 +310,10 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
   }
   reportarStatus('compositor_encontrado', 'Compositor de nova postagem confirmado.');
   reportarStatus('inserindo_mensagem', 'Inserindo a mensagem no grupo.');
-  await digitarTexto(compositor, texto, cadenciaMin, cadenciaMax);
+  const digitacao = await digitarTexto(compositor, texto, cadenciaMin, cadenciaMax);
+  if (!digitacao.ok) {
+    return { ok: false, erro: `O Facebook não aceitou o texto no campo de nova publicação. Nenhuma publicação foi enviada. A fila foi pausada. ${diagnosticarPagina('')}` };
+  }
 
   if (imagemDados) {
     reportarStatus('anexando_imagem', 'Anexando imagem à nova postagem.');

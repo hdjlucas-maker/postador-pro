@@ -85,3 +85,29 @@ test('usa somente o editor e o botão dentro do diálogo de nova publicação', 
   assert.equal(cliquesNoPublicar, 1);
   assert.equal(botaoComentario.isConnected, true);
 });
+
+test('não clica em Publicar quando o editor não aceita o texto', async () => {
+  const dialogo = {
+    innerText: 'Create post',
+    isConnected: true,
+    querySelector: () => ({ textContent: 'Create post' })
+  };
+  const editorPublicacao = elemento({ dialogo, texto: '' });
+  let cliquesNoPublicar = 0;
+  const botaoPublicar = elemento({ dialogo, texto: 'Post', click: () => { cliquesNoPublicar += 1; } });
+  const document = {
+    body: { innerText: '' },
+    execCommand: () => false,
+    querySelectorAll(seletor) {
+      if (seletor.includes('contenteditable') || seletor.includes('aria-label="Escreva"')) return [editorPublicacao];
+      if (seletor.includes('aria-label="Publicar"') || seletor.includes('button[type="submit"]')) return [botaoPublicar];
+      return [];
+    }
+  };
+  const receber = iniciarContent({ document, setTimeoutFn: fn => { fn(); return 0; } });
+  const resultado = await receber({ tipo: 'publicar', texto: 'Texto que o editor recusa', cadenciaMin: 1, cadenciaMax: 1 });
+  assert.equal(resultado.ok, false);
+  assert.match(resultado.erro, /não aceitou o texto/);
+  assert.match(resultado.erro, /Nenhuma publicação foi enviada/);
+  assert.equal(cliquesNoPublicar, 0);
+});
