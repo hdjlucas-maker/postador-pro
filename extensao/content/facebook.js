@@ -269,13 +269,23 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
   const arquivo = new File([dados], nome, { type: mime, lastModified: Date.now() });
   if (!arquivo.size || arquivo.type !== mime) return { ok: false };
 
-  // Estratégia 1: tentar definir via DataTransfer (funciona em alguns navegadores).
-  const transfer = new DataTransfer();
-  transfer.items.add(arquivo);
+  // Dispara eventos nativos que o React do Facebook escuta para reconhecer o upload.
+  function dispararEventosReacao() {
+    ['focus', 'input', 'change', 'blur'].forEach(nomeEvento => {
+      try {
+        input.dispatchEvent(new Event(nomeEvento, { bubbles: true, cancelable: true }));
+      } catch (_) {}
+    });
+  }
+
+  // Estratégia 1: DataTransfer no input[type=file].
   try {
+    const transfer = new DataTransfer();
+    transfer.items.add(arquivo);
     input.files = transfer.files;
     const anexado = input.files?.[0];
     if (anexado && anexado.name === nome && anexado.size === arquivo.size && anexado.type === mime) {
+      dispararEventosReacao();
       input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
       return { ok: true, nome, previasAntes };
@@ -284,36 +294,42 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
     // Segue para a próxima estratégia.
   }
 
-  // Estratégia 2: tentar criar um evento DragAndDrop com o arquivo no input.
-  // Alguns navegadores aceitam definir files através de um evento drop simulado.
+  // Estratégia 2: simular evento de "drop" (arrastar e soltar) na zona de texto.
+  // O Facebook aceita drop nativamente na caixa de postagem e dispara o listener
+  // global do React que faz o upload correto da imagem.
   try {
     const dt = new DataTransfer();
     dt.items.add(arquivo);
+    const zonaDeDrop = editor || dialogo.querySelector('[role="textbox"], [contenteditable="true"]') || dialogo;
     const dropEvent = new DragEvent('drop', {
       bubbles: true,
       cancelable: true,
       composed: true,
       dataTransfer: dt
     });
-    input.dispatchEvent(dropEvent);
-    const anexado = input.files?.[0];
-    if (anexado && anexado.name === nome && anexado.size === arquivo.size) {
-      input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    zonaDeDrop.dispatchEvent(dropEvent);
+    dispararEventosReacao();
+    // Aguarda um instante para o Facebook processar o drop.
+    await esperar(800);
+    const previaNova = Array.from(dialogo.querySelectorAll('img, video')).filter(visivel).find(el => {
+      const atual = `${el.tagName}:${el.currentSrc || el.src || ''}:${el.getAttribute('alt') || ''}`;
+      return !previasAntes.has(atual) && Boolean(el.currentSrc || el.src || el.getAttribute('alt'));
+    });
+    if (previaNova) {
       return { ok: true, nome, previasAntes };
     }
   } catch (_) {
     // Segue para a próxima estratégia.
   }
 
-  // Estratégia 3: tentar criar um objeto FileList sintético e definir via defineProperty.
+  // Estratégia 3: definir FileList via defineProperty (fallback).
   try {
-    const fileList = [arquivo];
     const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
     if (descriptor && descriptor.set) {
-      descriptor.set.call(input, fileList);
+      descriptor.set.call(input, [arquivo]);
       const anexado = input.files?.[0];
       if (anexado && anexado.name === nome && anexado.size === arquivo.size) {
+        dispararEventosReacao();
         input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
         return { ok: true, nome, previasAntes };
@@ -499,6 +515,11 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
     if (!anexo.ok) {
       return { ok: false, retentavel: true, erro: 'Não consegui selecionar a imagem no compositor. Confira o arquivo e tente novamente; nenhuma publicação foi enviada.' };
     }
+    // Aguarda o Facebook processar internamente o upload da imagem antes de
+    // seguir para a prévia e o clique em Publicar. Sem esse intervalo, o React
+    // pode não reconhecer o arquivo como um upload válido e o Facebook rejeita
+    // com "Não é possível ler arquivo".
+    await esperar(3000);
     const envioImagem = await aguardarUploadImagem(compositor.closest('[role="dialog"]'), anexo.nome, anexo.previasAntes);
     if (!envioImagem.ok) return { ok: false, retentavel: true, erro: envioImagem.erro };
   }
