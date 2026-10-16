@@ -326,8 +326,9 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
     });
     zonaDeDrop.dispatchEvent(dropEvent);
     // Delay obrigatório: o Facebook precisa de tempo para processar o upload
-    // da imagem internamente antes de qualquer outra ação.
-    await esperar(3000);
+    // da imagem internamente antes de qualquer outra ação. Cada máquina/internet
+    // demora um tempo diferente, então usamos 5 segundos como base segura.
+    await esperar(5000);
     const previaNova = Array.from(dialogo.querySelectorAll('img, video')).filter(visivel).find(el => {
       const atual = `${el.tagName}:${el.currentSrc || el.src || ''}:${el.getAttribute('alt') || ''}`;
       return !previasAntes.has(atual) && Boolean(el.currentSrc || el.src || el.getAttribute('alt'));
@@ -362,7 +363,7 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
         ['focus', 'input', 'change', 'blur'].forEach(nomeEvento => {
           try { input.dispatchEvent(new Event(nomeEvento, { bubbles: true, cancelable: true })); } catch (_) {}
         });
-        await esperar(3000);
+        await esperar(5000);
         const previaNova2 = Array.from(dialogo.querySelectorAll('img, video')).filter(visivel).find(el => {
           const atual = `${el.tagName}:${el.currentSrc || el.src || ''}:${el.getAttribute('alt') || ''}`;
           return !previasAntes.has(atual) && Boolean(el.currentSrc || el.src || el.getAttribute('alt'));
@@ -387,7 +388,7 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
           ['focus', 'input', 'change', 'blur'].forEach(nomeEvento => {
             try { input.dispatchEvent(new Event(nomeEvento, { bubbles: true, cancelable: true })); } catch (_) {}
           });
-          await esperar(3000);
+          await esperar(5000);
           const previaNova3 = Array.from(dialogo.querySelectorAll('img, video')).filter(visivel).find(el => {
             const atual = `${el.tagName}:${el.currentSrc || el.src || ''}:${el.getAttribute('alt') || ''}`;
             return !previasAntes.has(atual) && Boolean(el.currentSrc || el.src || el.getAttribute('alt'));
@@ -596,14 +597,14 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
 
     // Exibe aviso visual e desabilita o botão "Publicar" para o usuário não
     // clicar prematuramente. Cada máquina/internet demora um tempo diferente,
-    // então usamos um tempo base de 3 segundos após a confirmação da prévia.
+    // então usamos 5 segundos como base segura após a confirmação da prévia.
     const dialogo = compositor.closest('[role="dialog"]');
     const botaoPublicar = await esperarElemento(SELETORES.botaoPublicar, 10000);
     if (botaoPublicar && botaoPublicar.closest('[role="dialog"]') === dialogo) {
       const aviso = criarAvisoAguarde(dialogo, botaoPublicar);
       desabilitarBotaoPublicar(botaoPublicar);
       reportarStatus('processando_imagem', 'Processando imagem, aguarde antes de publicar.');
-      await esperar(3000);
+      await esperar(5000);
       removerAvisoAguarde();
       reabilitarBotaoPublicar(botaoPublicar);
     }

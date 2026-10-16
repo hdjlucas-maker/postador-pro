@@ -7,9 +7,14 @@
     "test": "node tests/campanhas-validation.test.mjs && node tests/facebook-content.test.mjs",
     "test:worker": "npm --prefix worker test",
     "verificar:extensao": "node scripts/empacotar-extensao.js --verificar",
-    "empacotar": "node scripts/empacotar-extensao.js"
+    "empacotar": "node scripts/empacotar-extensao.js",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "engines": {
     "node": ">=18.17.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.1"
   }
 }

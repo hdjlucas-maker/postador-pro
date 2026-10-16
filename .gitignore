@@ -32,3 +32,7 @@ Thumbs.db
 
 # Arquivo pessoal com credenciais: nunca versionar
 info.md
+
+.dev.vars*
+!.dev.vars.example
+!.env.example
