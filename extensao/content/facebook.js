@@ -303,17 +303,6 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
   const dialogo = editor?.closest('[role="dialog"]');
   if (!dialogo || !dialogoNovaPublicacao(dialogo)) return { ok: false };
   const previasAntes = assinaturaDasPrevias(dialogo);
-  let input = dialogo.querySelector(SELETORES.inputArquivo);
-  if (!input) {
-    const foto = Array.from(dialogo.querySelectorAll(SELETORES.botaoFoto.join(','))).find(seguroParaPublicacao) || elementoPorTexto(['foto/vídeo', 'photo/video', 'adicionar foto'], true);
-    if (foto) foto.click();
-    const inicio = Date.now();
-    while (!input && Date.now() - inicio < 5000) {
-      input = dialogo.querySelector(SELETORES.inputArquivo);
-      if (!input) await esperar(250);
-    }
-  }
-  if (!input) return { ok: false };
 
   const mime = String(tipo || '').toLowerCase();
   if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime)) return { ok: false };
@@ -321,37 +310,13 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
   const arquivo = new File([dados], nome, { type: mime, lastModified: Date.now() });
   if (!arquivo.size || arquivo.type !== mime) return { ok: false };
 
-  // Dispara eventos nativos que o React do Facebook escuta para reconhecer o upload.
-  function dispararEventosReacao() {
-    ['focus', 'input', 'change', 'blur'].forEach(nomeEvento => {
-      try {
-        input.dispatchEvent(new Event(nomeEvento, { bubbles: true, cancelable: true }));
-      } catch (_) {}
-    });
-  }
-
-  // Estratégia 1: DataTransfer no input[type=file].
-  try {
-    const transfer = new DataTransfer();
-    transfer.items.add(arquivo);
-    input.files = transfer.files;
-    const anexado = input.files?.[0];
-    if (anexado && anexado.name === nome && anexado.size === arquivo.size && anexado.type === mime) {
-      dispararEventosReacao();
-      input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-      return { ok: true, nome, previasAntes };
-    }
-  } catch (_) {
-    // Segue para a próxima estratégia.
-  }
-
-  // Estratégia 2: simular evento de "drop" (arrastar e soltar) na zona de texto.
+  // Estratégia 1: Simular evento de "drop" (arrastar e soltar) na zona de texto/compositor.
   // O Facebook aceita drop nativamente na caixa de postagem e dispara o listener
   // global do React que faz o upload correto da imagem.
   try {
     const dt = new DataTransfer();
     dt.items.add(arquivo);
+    // A zona de drop pode ser o contenteditable ou o dialog inteiro.
     const zonaDeDrop = editor || dialogo.querySelector('[role="textbox"], [contenteditable="true"]') || dialogo;
     const dropEvent = new DragEvent('drop', {
       bubbles: true,
@@ -360,9 +325,9 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
       dataTransfer: dt
     });
     zonaDeDrop.dispatchEvent(dropEvent);
-    dispararEventosReacao();
-    // Aguarda um instante para o Facebook processar o drop.
-    await esperar(800);
+    // Delay obrigatório: o Facebook precisa de tempo para processar o upload
+    // da imagem internamente antes de qualquer outra ação.
+    await esperar(3000);
     const previaNova = Array.from(dialogo.querySelectorAll('img, video')).filter(visivel).find(el => {
       const atual = `${el.tagName}:${el.currentSrc || el.src || ''}:${el.getAttribute('alt') || ''}`;
       return !previasAntes.has(atual) && Boolean(el.currentSrc || el.src || el.getAttribute('alt'));
@@ -374,27 +339,70 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
     // Segue para a próxima estratégia.
   }
 
-  // Estratégia 3: definir FileList via defineProperty (fallback).
-  try {
-    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
-    if (descriptor && descriptor.set) {
-      descriptor.set.call(input, [arquivo]);
-      const anexado = input.files?.[0];
-      if (anexado && anexado.name === nome && anexado.size === arquivo.size) {
-        dispararEventosReacao();
-        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-        return { ok: true, nome, previasAntes };
+  // Estratégia 2: Tentar injetar no input[type=file] via DataTransfer + eventos.
+  let input = dialogo.querySelector(SELETORES.inputArquivo);
+  if (!input) {
+    const foto = Array.from(dialogo.querySelectorAll(SELETORES.botaoFoto.join(','))).find(seguroParaPublicacao) || elementoPorTexto(['foto/vídeo', 'photo/video', 'adicionar foto'], true);
+    if (foto) {
+      foto.click();
+      const inicio = Date.now();
+      while (!input && Date.now() - inicio < 5000) {
+        input = dialogo.querySelector(SELETORES.inputArquivo);
+        if (!input) await esperar(250);
       }
     }
-  } catch (_) {
-    // Não conseguiu definir files de forma direta.
+  }
+  if (input) {
+    try {
+      const transfer = new DataTransfer();
+      transfer.items.add(arquivo);
+      input.files = transfer.files;
+      const anexado = input.files?.[0];
+      if (anexado && anexado.name === nome && anexado.size === arquivo.size && anexado.type === mime) {
+        ['focus', 'input', 'change', 'blur'].forEach(nomeEvento => {
+          try { input.dispatchEvent(new Event(nomeEvento, { bubbles: true, cancelable: true })); } catch (_) {}
+        });
+        await esperar(3000);
+        const previaNova2 = Array.from(dialogo.querySelectorAll('img, video')).filter(visivel).find(el => {
+          const atual = `${el.tagName}:${el.currentSrc || el.src || ''}:${el.getAttribute('alt') || ''}`;
+          return !previasAntes.has(atual) && Boolean(el.currentSrc || el.src || el.getAttribute('alt'));
+        });
+        if (previaNova2) {
+          return { ok: true, nome, previasAntes };
+        }
+      }
+    } catch (_) {
+      // Segue para a próxima estratégia.
+    }
   }
 
-  // Nenhuma estratégia conseguiu injetar a imagem no input do Facebook.
-  // Isso ocorre porque navegadores modernos bloqueiam a definição de
-  // input.files por razões de segurança, e o Facebook pode bloquear
-  // injeções de arquivo que não vieram de um upload nativo do usuário.
+  // Estratégia 3: definir FileList via defineProperty (fallback).
+  if (input) {
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(input, [arquivo]);
+        const anexado = input.files?.[0];
+        if (anexado && anexado.name === nome && anexado.size === arquivo.size) {
+          ['focus', 'input', 'change', 'blur'].forEach(nomeEvento => {
+            try { input.dispatchEvent(new Event(nomeEvento, { bubbles: true, cancelable: true })); } catch (_) {}
+          });
+          await esperar(3000);
+          const previaNova3 = Array.from(dialogo.querySelectorAll('img, video')).filter(visivel).find(el => {
+            const atual = `${el.tagName}:${el.currentSrc || el.src || ''}:${el.getAttribute('alt') || ''}`;
+            return !previasAntes.has(atual) && Boolean(el.currentSrc || el.src || el.getAttribute('alt'));
+          });
+          if (previaNova3) {
+            return { ok: true, nome, previasAntes };
+          }
+        }
+      }
+    } catch (_) {
+      // Não conseguiu definir files de forma direta.
+    }
+  }
+
+  // Nenhuma estratégia conseguiu injetar a imagem.
   return { ok: false, erroInjecao: true };
 }
 
