@@ -415,9 +415,7 @@ tests/                     testes da extensão (Spintax/validação e DOM)
 
 ## 8. Pendências conhecidas (nesta ordem de impacto na venda)
 
-1. **Botão "Gerar 3 variações" não funciona.** `options.js` chama
-   `POST /api/extensao/gerar-textos`, rota que não existe no worker (responde
-   404). Decidir: implementar a rota ou esconder o painel de IA.
+1. ~~Botão "Gerar 3 variações" não funciona.~~ **RESOLVIDO (desabilitado):** o botão foi desabilitado na interface com aviso claro, pois a rota `POST /api/extensao/gerar-textos` não existe no worker (responde 404). Para reativar, implementar a rota no worker ou remover o aviso.
 2. **Recuperação de senha não envia e-mail.** Sem o binding `EMAIL` (exige
    domínio próprio habilitado no Cloudflare Email Sending), o link só vai para
    o log. Cliente que esquece a senha fica sem caminho de recuperação, salvo

@@ -101,7 +101,26 @@ Mudar `TRIAL_DAYS` exige editar `worker/wrangler.jsonc` e fazer `wrangler deploy
 - Manifest V3: o Chrome encerra o service worker por inatividade; `chrome.alarms` só dispara com o navegador aberto. Agendamento depende do navegador ficar aberto (documentado na interface e nos termos).
 - A extensão armazena campanhas, publicações, imagens e destinos **no navegador do cliente**, não no servidor. O servidor guarda apenas a conta do cliente (e-mail, nome, hash da senha, plano, vencimento, histórico de pagamento) e agora também o **contador de publicações diárias** (tabela `publicacoes_dia` no D1).
 - `info.md` tem credenciais de administrador e é **local apenas**; nunca commitar nem incluir no zip público.
-- Botão "Gerar 3 variações" chama `POST /api/extensao/gerar-textos`, rota que não existe (404). Recuperação de senha não envia e-mail sem o binding `EMAIL` (domínio próprio no Cloudflare Email Sending). O limite diário é validado nos dois lados: servidor (`POST /api/extensao/publicacao`, atômico e respeita o teto) e extensão (fail-fast local).
+- Botão "Gerar 3 variações" desabilitado: a rota `POST /api/extensao/gerar-textos` não existe no worker (404). O botão foi desabilitado na interface com aviso claro para não gerar expectativa. Para reativar, implementar a rota no worker ou remover o aviso.
 - `DIRETRIZES.md` no GitHub é uma versão antiga; este arquivo só chega a outras IAs se for commitado de propósito.
 - Rate limit de edge (`RL_GERAL`, `RL_WEBHOOK`) está **desligado** no `wrangler.jsonc` enquanto o Wrangler recusar o campo `ratelimits`. Até lá, o rate limit roda no D1 (tabela `rate_limits` + `security.limiteD1` nas rotas, incluindo `/publicacao`).
 - Imagem com nome acentuado (ex: "negócio.png") fazia o Facebook rejeitar com "Não é possível ler arquivo". O nome agora é sanitizado (acentos removidos) antes de enviar, e o tipo MIME é validado pelos "magic bytes" do arquivo. Se o Facebook ainda rejeitar, pedir ao usuário para reenviar a imagem sem acento no nome do arquivo.
+- Recuperação de senha por e-mail **não funciona em produção sem domínio próprio**: precisa de `npx wrangler email sending enable SEUDOMINIO`, binding `EMAIL` no `wrangler.jsonc`, `EMAIL_FROM` nas vars e `wrangler deploy`. Sem isso, o link vai só para o log e o admin redefini a senha pelo painel.
+
+## Seletores do Facebook (revisar se a publicação quebrar)
+
+O Facebook muda o DOM com frequência. Se a extensão parar de publicar, revisar esses seletores em `extensao/content/facebook.js` (`SELETORES`):
+
+- `compositor`: `[role="dialog"] [contenteditable="true"]`, `[role="dialog"] [aria-label*="Escreva"]`, `[role="dialog"] [aria-label*="Write"]`
+- `botaoPublicar`: `[role="dialog"] [aria-label="Publicar"]`, `[role="dialog"] [aria-label="Post"]`, `[role="dialog"] button[type="submit"]`
+- `botaoFoto`: `[role="dialog"] [aria-label="Foto/vídeo"]`, `[role="dialog"] [aria-label="Photo/video"]`, `[role="dialog"] input[type="file"]`
+
+Função `diagnosticarPagina()` já captura rótulos de botões e diálogos quando o compositor não é encontrado — usar essa saída para ajustar os seletores.
+
+## Monitoramento em produção
+
+- Endpoint `GET /api/health` responde se a API está no ar (pode ser monitorado externamente, ex: UptimeRobot).
+- `cd worker && npx wrangler tail` mostra logs em tempo real.
+- Observabilidade já está ligada no `wrangler.jsonc` (`observability.enabled`).
+- Não há alerta automático configurado (e-mail/WhatsApp quando algo quebra).
+
