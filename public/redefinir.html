@@ -16,43 +16,25 @@
 </header>
 
 <main>
-  <form class="formulario" id="form-pedido" autocomplete="on">
-    <h1>Esqueci minha senha</h1>
-    <p>Informe o e-mail da sua conta. Enviamos um link com o código para criar uma nova senha.</p>
-
-    <div class="mensagem" id="aviso"></div>
-
-    <div class="campo">
-      <label for="email">E-mail da conta</label>
-      <input type="email" id="email" name="email" required maxlength="254" autocomplete="email" placeholder="voce@exemplo.com">
+  <div class="centralizado">
+    <div class="formulario">
+      <h1>Esqueci minha senha</h1>
+      <p class="aviso-senha">
+        Por enquanto, não é possível redefinir a senha diretamente por aqui.
+      </p>
+      <div class="caixa-contato">
+        <h2>Como recuperar sua senha</h2>
+        <p>Entre em contato com o suporte pelo WhatsApp e informe:</p>
+        <ul>
+          <li>O e-mail usado no seu cadastro no Postador Pro</li>
+          <li>Que você precisa gerar uma nova senha</li>
+        </ul>
+        <p>Após confirmar seus dados, o suporte poderá gerar uma senha temporária para você entrar novamente.</p>
+        <a class="botao largo" href="https://wa.me/5521985390734?text=Ol%C3%A1%2C%20esqueci%20minha%20senha%20do%20Postador%20Pro.%20Meu%20e-mail%20de%20cadastro%20%C3%A9%3A%20" target="_blank" rel="noopener">Falar no WhatsApp</a>
+        <p class="intro contato-email">Ou envie um e-mail para: <a class="link-suave" href="mailto:aservicos17@gmail.com">aservicos17@gmail.com</a></p>
+      </div>
     </div>
-
-    <button class="botao largo" type="submit" id="enviar">Enviar link</button>
-  </form>
-
-  <form class="formulario" id="form-nova" autocomplete="off" hidden>
-    <h1>Criar nova senha</h1>
-    <p>Digite o código que chegou por e-mail e escolha uma senha nova.</p>
-
-    <div class="mensagem" id="aviso-nova"></div>
-
-    <div class="campo">
-      <label for="token">Código do e-mail</label>
-      <input type="text" id="token" name="token" required maxlength="200" autocomplete="one-time-code" placeholder="Cole o código aqui">
-    </div>
-
-    <div class="campo">
-      <label for="senha">Senha nova</label>
-      <input type="password" id="senha" name="senha" required minlength="8" maxlength="200" autocomplete="new-password">
-    </div>
-
-    <div class="campo">
-      <label for="confirmar">Repita a senha</label>
-      <input type="password" id="confirmar" name="confirmar" required minlength="8" maxlength="200" autocomplete="new-password">
-    </div>
-
-    <button class="botao largo" type="submit" id="salvar">Salvar nova senha</button>
-  </form>
+  </div>
 </main>
 
 <footer class="rodape">
@@ -61,7 +43,5 @@
   </div>
 </footer>
 
-<script src="/assets/comum.js"></script>
-<script src="/assets/redefinir.js"></script>
 </body>
 </html>
