@@ -37,6 +37,58 @@ function esperar(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Cria um aviso visual "aguarde" próximo ao botão de publicar para o usuário
+// saber que a imagem está sendo processada e não clicar prematuramente.
+function criarAvisoAguarde(dialogo, botao) {
+  if (!dialogo || !botao) return null;
+  // Remove aviso anterior se existir
+  removerAvisoAguarde();
+  const aviso = document.createElement('div');
+  aviso.id = 'postador-pro-aguarde';
+  aviso.style.cssText = `
+    position: absolute;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 999999;
+    pointer-events: none;
+    white-space: nowrap;
+  `;
+  aviso.textContent = 'Processando imagem, aguarde...';
+  // Posiciona acima do botão de publicar
+  const rect = botao.getBoundingClientRect();
+  const dialogoRect = dialogo.getBoundingClientRect();
+  aviso.style.top = (rect.top - dialogoRect.top - 40) + 'px';
+  aviso.style.left = (rect.left - dialogoRect.left) + 'px';
+  dialogo.appendChild(aviso);
+  return aviso;
+}
+
+function removerAvisoAguarde() {
+  const aviso = document.querySelector('#postador-pro-aguarde');
+  if (aviso) aviso.remove();
+}
+
+function desabilitarBotaoPublicar(botao) {
+  if (!botao) return;
+  botao.disabled = true;
+  botao.setAttribute('aria-disabled', 'true');
+  botao.style.opacity = '0.6';
+  botao.style.cursor = 'not-allowed';
+}
+
+function reabilitarBotaoPublicar(botao) {
+  if (!botao) return;
+  botao.disabled = false;
+  botao.removeAttribute('aria-disabled');
+  botao.style.opacity = '';
+  botao.style.cursor = '';
+}
+
 function reportarStatus(fase, mensagem) {
   chrome.runtime.sendMessage({ tipo: 'status-publicacao', fase, mensagem, extras: identidadeGrupoAtual }).catch(() => {});
 }
@@ -509,6 +561,10 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
     return { ok: false, retentavel: true, erro: `O Facebook não aceitou o texto no campo de nova publicação. Nenhuma publicação foi enviada; este grupo será registrado como falha. ${diagnosticarPagina('')}` };
   }
 
+  const dialogo = compositor.closest('[role="dialog"]');
+
+  let botao = null;
+
   if (imagemDados) {
     reportarStatus('anexando_imagem', 'Anexando imagem à nova postagem.');
     const anexo = await anexarImagem(imagemDados, imagemTipo, imagemNome);
@@ -522,11 +578,27 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
     await esperar(3000);
     const envioImagem = await aguardarUploadImagem(compositor.closest('[role="dialog"]'), anexo.nome, anexo.previasAntes);
     if (!envioImagem.ok) return { ok: false, retentavel: true, erro: envioImagem.erro };
-  }
 
-  const dialogo = compositor.closest('[role="dialog"]');
-  let botao = await esperarElemento(SELETORES.botaoPublicar, 10000);
-  if (!botao || botao.closest('[role="dialog"]') !== dialogo) botao = botaoPublicarDoDialog(dialogo);
+    // Exibe aviso visual e desabilita o botão "Publicar" para o usuário não
+    // clicar prematuramente. Cada máquina/internet demora um tempo diferente,
+    // então usamos um tempo base de 3 segundos após a confirmação da prévia.
+    try {
+      const botaoPublicar = await esperarElemento(SELETORES.botaoPublicar, 10000);
+      if (botaoPublicar && botaoPublicar.closest('[role="dialog"]') === dialogo) {
+        const aviso = criarAvisoAguarde(dialogo, botaoPublicar);
+        desabilitarBotaoPublicar(botaoPublicar);
+        reportarStatus('processando_imagem', 'Processando imagem, aguarde antes de publicar.');
+        await esperar(3000);
+        removerAvisoAguarde();
+        reabilitarBotaoPublicar(botaoPublicar);
+      }
+    } catch (_) {
+      // Em ambientes de teste ou se o DOM não estiver disponível, ignora o aviso.
+    }
+  }
+  let botaoFinal = await esperarElemento(SELETORES.botaoPublicar, 10000);
+  if (!botaoFinal || botaoFinal.closest('[role="dialog"]') !== dialogo) botaoFinal = botaoPublicarDoDialog(dialogo);
+  botao = botaoFinal;
   if (!botao || botao.closest('[role="dialog"]') !== dialogo || !dialogoNovaPublicacao(dialogo) || botao.disabled || botao.getAttribute('aria-disabled') === 'true') {
     return { ok: false, retentavel: true, erro: 'Não foi possível confirmar o botão “Publicar”. Nenhuma publicação foi enviada; o grupo pode ser tentado novamente.' };
   }
