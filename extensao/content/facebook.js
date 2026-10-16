@@ -191,7 +191,12 @@ function extensaoDaImagem(tipo) {
 
 function nomeSeguroDaImagem(nome, tipo) {
   const extensao = extensaoDaImagem(tipo);
-  let seguro = String(nome || '').split(/[\\/]/).pop().replace(/[^\p{L}\p{N}._-]/gu, '_');
+  // Remove acentos e diacríticos: o Facebook rejeita nomes com caracteres
+  // especiais (ex: "negócio.png" dá "Não é possível ler arquivo").
+  const semAcento = String(nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  let seguro = semAcento.split(/[\\/]/).pop().replace(/[^\p{L}\p{N}._-]/gu, '_');
   if (!seguro || seguro === '.' || seguro === '..') seguro = 'imagem';
   const ponto = seguro.lastIndexOf('.');
   const atual = ponto > 0 ? seguro.slice(ponto).toLowerCase() : '';
