@@ -266,22 +266,64 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
   const mime = String(tipo || '').toLowerCase();
   if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime)) return { ok: false };
   const nome = nomeSeguroDaImagem(nomeOriginal, mime);
-  // ArrayBuffer segue diretamente como parte do File: não precisamos de um
-  // Blob intermediário que pode perder metadados ao atravessar contextos.
   const arquivo = new File([dados], nome, { type: mime, lastModified: Date.now() });
   if (!arquivo.size || arquivo.type !== mime) return { ok: false };
+
+  // Estratégia 1: tentar definir via DataTransfer (funciona em alguns navegadores).
   const transfer = new DataTransfer();
   transfer.items.add(arquivo);
   try {
     input.files = transfer.files;
     const anexado = input.files?.[0];
-    if (!anexado || anexado.name !== nome || anexado.size !== arquivo.size || anexado.type !== mime) return { ok: false };
+    if (anexado && anexado.name === nome && anexado.size === arquivo.size && anexado.type === mime) {
+      input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+      return { ok: true, nome, previasAntes };
+    }
   } catch (_) {
-    return { ok: false };
+    // Segue para a próxima estratégia.
   }
-  input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-  input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-  return { ok: true, nome, previasAntes };
+
+  // Estratégia 2: tentar criar um evento DragAndDrop com o arquivo no input.
+  // Alguns navegadores aceitam definir files através de um evento drop simulado.
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(arquivo);
+    const dropEvent = new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      dataTransfer: dt
+    });
+    input.dispatchEvent(dropEvent);
+    const anexado = input.files?.[0];
+    if (anexado && anexado.name === nome && anexado.size === arquivo.size) {
+      input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+      return { ok: true, nome, previasAntes };
+    }
+  } catch (_) {
+    // Segue para a próxima estratégia.
+  }
+
+  // Estratégia 3: tentar criar um objeto FileList sintético e definir via defineProperty.
+  try {
+    const fileList = [arquivo];
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(input, fileList);
+      const anexado = input.files?.[0];
+      if (anexado && anexado.name === nome && anexado.size === arquivo.size) {
+        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+        return { ok: true, nome, previasAntes };
+      }
+    }
+  } catch (_) {
+    // Não conseguiu definir files de forma direta.
+  }
+
+  return { ok: false };
 }
 
 function detectarAvisoFacebook() {
