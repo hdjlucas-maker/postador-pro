@@ -380,14 +380,20 @@ tests/                     testes da extensão (Spintax/validação e DOM)
 
 ## 5. O que está verificado
 
-- `npm test` (raiz): 9 testes da extensão passam (validação de campos, Spintax,
+- `npm test` (raiz): 10 testes da extensão passam (validação de campos, Spintax,
   e seleção do compositor de nova postagem no DOM simulado, rejeitando campo de
   comentário dentro de `<article>`).
-- `npm run test:worker`: 22 testes da API passam (precisa de
+- `npm run test:worker`: 23 testes da API passam (precisa de
   `cd worker && npm install` antes).
 - `npm run verificar:extensao`: confere manifesto, permissões, `key`, arquivos
   citados, sintaxe de todos os `.js` e referências dos HTML.
 - API no ar: `GET /api/config` responde com os planos e limites abaixo.
+- Limite diário server-side: `GET /api/extensao/publicacao/hoje` e
+  `POST /api/extensao/publicacao` contam e bloqueiam quando o usuário atinge o
+  teto do plano (5 trial / 10 Pro).
+- Imagem com nome acentuado: o nome é sanitizado (acentos removidos) antes de
+  enviar ao Facebook, e o tipo MIME é validado pelos "magic bytes" do arquivo.
+- Versão da extensão: 1.0.35; ZIP gerado em `public/downloads/postador-pro.zip`.
 
 ## 6. O que NÃO está verificado
 
@@ -396,7 +402,8 @@ tests/                     testes da extensão (Spintax/validação e DOM)
   O Facebook muda o DOM com frequência; os seletores de
   `content/facebook.js` precisam ser revisados se quebrarem.
 - Pagamento real ponta a ponta com a InfinitePay.
-- Envio de e-mail (veja pendência 2).
+- Envio de e-mail de recuperação de senha (veja pendência 2).
+- Monitoramento automático de queda da API (veja pendência 6).
 
 ## 7. Planos e limites em produção (vêm do `wrangler.jsonc`)
 
@@ -415,9 +422,10 @@ tests/                     testes da extensão (Spintax/validação e DOM)
    domínio próprio habilitado no Cloudflare Email Sending), o link só vai para
    o log. Cliente que esquece a senha fica sem caminho de recuperação, salvo
    pelo painel de administração.
-3. **Limite diário só na extensão.** O servidor devolve o limite do plano, mas
-   não conta publicações. Quem editar a extensão local consegue passar do
-   limite. O bloco de regras acima pede validação nos dois lados.
+3. ~~Limite diário só na extensão.~~ **RESOLVIDO:** o servidor agora conta e
+   bloqueia quando o usuário atinge o teto do plano (`POST /api/extensao/
+   publicacao`, atômico, respeita o limite). A extensão consulta antes de
+   publicar e registra após sucesso.
 4. **Duração da avaliação.** O código e a configuração versionada estão em 7
    dias. A configuração só passa a valer na API de produção depois do deploy
    do Worker. Contas já cadastradas mantêm a data `trialFim` gravada; alterar
@@ -427,10 +435,13 @@ tests/                     testes da extensão (Spintax/validação e DOM)
    Publicar na Chrome Web Store muda isso, mas está sujeito à revisão da loja.
 6. **Rate limit geral no edge** (`RL_GERAL` e `RL_WEBHOOK`) está desligado
    porque o Wrangler 4.x recusa o campo. Hoje só vale o limite em D1.
-7. `info.md` e `DIRETRIZES.md` ficam só locais pelo
-   `sincronizar-git-postador.sh`. O `DIRETRIZES.md` que está no GitHub é uma
-   versão antiga; este arquivo precisa ser commitado de propósito se quiser que
-   outras IAs o leiam pelo repositório.
+7. **Monitoramento automático.** Não há alerta se a API cair ou se o webhook
+   da InfinitePay parar de funcionar. Usar `npx wrangler tail` para logs ou um
+   serviço externo que faça `GET /api/health` periodicamente.
+8. **Seletores do Facebook.** `content/facebook.js` depende do DOM do
+   Facebook, que muda com frequência. Revisar se o compositor, o botão
+   "Publicar" e o campo de foto/vídeo ainda batem se a publicação parar de
+   funcionar.
 
 ## 9. Comandos
 
