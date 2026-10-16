@@ -1,6 +1,6 @@
 {
   "name": "postador-pro-worker",
-  "version": "1.0.0",
+  "version": "1.0.33",
   "private": true,
   "description": "API de licença e webhook InfinitePay do Postador Pro, sobre Cloudflare Workers + D1",
   "scripts": {

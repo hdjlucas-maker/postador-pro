@@ -133,6 +133,49 @@ function criar() {
     });
   });
 
+  // Limite diário server-side: a extensão consulta antes de publicar e o servidor
+  // incrementa somente quando a publicação é confirmada. Isso impede que quem
+  // editar a extensão localmente passe do limite do plano.
+  app.get('/publicacao/hoje', auth.exigirToken(), async c => {
+    const env = c.env;
+    const user = c.get('user');
+    const hoje = new Date().toISOString().slice(0, 10);
+    const limites = auth.limitesDoPlano(env, user);
+    const contador = await db.publicacoes_contarHoje(env, user._id, hoje);
+    return c.json({
+      hoje,
+      limite: limites.gruposPorDia,
+      contador,
+      restante: Math.max(0, limites.gruposPorDia - contador),
+      pode: contador < limites.gruposPorDia
+    });
+  });
+
+  // Incrementa o contador de hoje de forma atômica. Só avança se o contador
+  // atual for menor que o limite do plano, então requisições duplicadas ou
+  // simultâneas nunca ultrapassam o teto.
+  app.post('/publicacao', auth.exigirToken(), security.limiteD1('publicacao', { max: 60, chave: porConta }), async c => {
+    const env = c.env;
+    const user = c.get('user');
+    const hoje = new Date().toISOString().slice(0, 10);
+    const limites = auth.limitesDoPlano(env, user);
+    const resultado = await db.publicacoes_incrementarHoje(env, user._id, hoje, limites.gruposPorDia);
+
+    if (!resultado.ok) {
+      log.warn('limite_diario_atingido', { userId: user._id, hoje, limite: limites.gruposPorDia });
+      return c.json({ ok: false, erro: 'Limite diário atingido. A fila foi pausada para proteger sua conta.' }, 429);
+    }
+
+    log.info('publicacao_registrada', { userId: user._id, hoje, contador: resultado.contador, limite: limites.gruposPorDia });
+    return c.json({
+      ok: true,
+      hoje,
+      limite: limites.gruposPorDia,
+      contador: resultado.contador,
+      restante: Math.max(0, limites.gruposPorDia - resultado.contador)
+    });
+  });
+
   return app;
 }
 

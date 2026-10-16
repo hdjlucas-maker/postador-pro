@@ -37,7 +37,7 @@ function list(value) {
 function carregarConfig(env) {
   const isProd = env.IS_PROD === '1' || env.IS_PROD === 'true';
 
-  const trialDays = num(env.TRIAL_DAYS, 7);
+  const trialDays = num(env.TRIAL_DAYS, 30);
   const sessionDays = num(env.SESSION_DAYS, 30);
 
   const config = {

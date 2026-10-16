@@ -13,6 +13,7 @@ let salvandoCampanha = false;
 let geracaoIaEmCurso = false;
 let ritmoAtual = { minMs: CONFIG.DELAY_ENTRE_POSTS_MIN * 1000, maxMs: CONFIG.DELAY_ENTRE_POSTS_MAX * 1000 };
 let mensagemEmFoco = null;
+let assinaturaListaCampanhas = '';
 
 function obterCamposMensagens() {
   return Array.from(document.querySelectorAll('[data-mensagem]'));
@@ -78,6 +79,29 @@ function escapar(html) {
   return String(html).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function idDoDestino(destino) {
+  try {
+    const url = new URL(/^https?:\/\//i.test(destino) ? destino : `https://www.facebook.com/groups/${encodeURIComponent(destino)}`);
+    return decodeURIComponent(url.pathname.match(/^\/groups\/([^/]+)/i)?.[1] || destino);
+  } catch (_) {
+    return String(destino || 'desconhecido');
+  }
+}
+
+function rotuloDoGrupo(destino, resultado) {
+  const id = resultado?.grupoId || idDoDestino(destino);
+  return resultado?.grupoNome ? `${resultado.grupoNome} (ID ${id})` : `Grupo ID ${id}`;
+}
+
+function resumoMensagemUsada(item) {
+  if (!item?.texto) return '';
+  const numero = Number(item.variacaoIndice) || 0;
+  const total = Number(item.totalVariacoes) || 0;
+  const rotulo = numero && total ? `Mensagem ${numero}/${total}` : 'Mensagem usada';
+  const trecho = String(item.texto).replace(/\s+/g, ' ').trim();
+  return `<br><small>${rotulo}: ${escapar(trecho.length > 110 ? `${trecho.slice(0, 107)}…` : trecho)}</small>`;
+}
+
 async function carregarResumoLicenca() {
   const estado = await armazenamento.carregarEstado();
   if (!estado.token) {
@@ -105,7 +129,7 @@ async function carregarResumoLicenca() {
 
 function renderizarStatus(estado) {
   const execucao = estado.execucao || { fase: 'parado', mensagem: 'Nenhuma execução em andamento.' };
-  const nomes = { parado: 'Parado', preparando: 'Preparando', abrindo_grupo: 'Abrindo grupo', compositor_encontrado: 'Compositor encontrado', inserindo_mensagem: 'Inserindo mensagem', anexando_imagem: 'Anexando imagem', publicando: 'Publicando', aguardando: 'Aguardando intervalo', concluida: 'Concluída', erro: 'Erro' };
+  const nomes = { parado: 'Parado', preparando: 'Preparando', abrindo_grupo: 'Abrindo grupo', grupo_confirmado: 'Grupo confirmado', compositor_encontrado: 'Compositor encontrado', inserindo_mensagem: 'Inserindo mensagem', anexando_imagem: 'Anexando imagem', publicando: 'Publicando', aguardando: 'Aguardando intervalo', concluida: 'Concluída', erro: 'Erro' };
   const rotuloStatus = execucao.fase === 'encerrada' ? 'Encerrada'
     : execucao.fase === 'erro' && execucao.pausada ? 'Pausada por erro'
       : execucao.pausada ? 'Pausada'
@@ -116,8 +140,18 @@ function renderizarStatus(estado) {
   $('botao-retomar').classList.toggle('oculta', !execucao.pausada || execucao.fase === 'encerrada');
   const campanha = (estado.campanhas || []).find(c => c.id === execucao.campanhaId) || (estado.campanhas || []).find(c => c.status === 'ativa');
   const historico = (estado.historico || []).filter(h => !campanha || h.campanhaId === campanha.id);
-  const publicados = historico.filter(h => h.resultado === 'publicado').length;
-  const falhas = historico.filter(h => h.resultado === 'falhou').length;
+  // Uma nova tentativa substitui o estado exibido daquele destino; o histórico
+  // completo continua guardado, mas não infla contadores com falhas antigas.
+  const ultimoResultadoPorDestino = new Map();
+  for (const item of historico) {
+    const anterior = ultimoResultadoPorDestino.get(item.destino);
+    if (!anterior || Number(item.quando || 0) >= Number(anterior.quando || 0)) {
+      ultimoResultadoPorDestino.set(item.destino, item);
+    }
+  }
+  const resultadosAtuais = [...ultimoResultadoPorDestino.values()];
+  const publicados = resultadosAtuais.filter(h => h.resultado === 'publicado').length;
+  const falhas = resultadosAtuais.filter(h => h.resultado === 'falhou').length;
   const restantes = campanha ? (campanha.destinos || []).length : 0;
   const total = campanha ? (campanha.destinosOriginais || campanha.destinos || []).length : 0;
   const concluidos = publicados + falhas;
@@ -125,7 +159,7 @@ function renderizarStatus(estado) {
   $('status-concluidos').textContent = publicados;
   $('status-falhas').textContent = falhas;
   $('status-restantes').textContent = restantes;
-  $('status-progresso').textContent = `${publicados} / ${total} grupos publicados${falhas ? ` · ${falhas} falha(s)` : ''}`;
+  $('status-progresso').textContent = `${publicados} / ${total} grupos publicados · ${total} selecionados${falhas ? ` · ${falhas} falha(s)` : ''}`;
   $('status-barra').max = Math.max(1, total);
   $('status-barra').value = Math.min(total, concluidos);
   if (execucao.proximaEm) {
@@ -136,18 +170,28 @@ function renderizarStatus(estado) {
   const fila = $('fila-visual');
   if (!campanha) { fila.innerHTML = ''; return; }
   const originais = campanha.destinosOriginais || campanha.destinos || [];
-  fila.innerHTML = originais.map(destino => {
-    const item = historico.filter(h => h.destino === destino).slice(-1)[0];
-    if (item?.resultado === 'publicado') return `<div class="fila-item ok">✓ ${escapar(destino)} — publicado às ${formatarData(item.quando)}</div>`;
-    if (item?.resultado === 'falhou') return `<div class="fila-item erro">✕ ${escapar(destino)} — falhou: ${escapar(item.erro || 'erro não confirmado')}</div>`;
-    if (campanha.destinos[0] === destino && !execucao.pausada && execucao.fase !== 'parado') return `<div class="fila-item preparando">● ${escapar(destino)} — preparando...</div>`;
-    return `<div class="fila-item">○ ${escapar(destino)}</div>`;
+  fila.innerHTML = originais.map((destino, indice) => {
+    const item = ultimoResultadoPorDestino.get(destino) || (execucao.destino === destino ? execucao : null);
+    const grupo = `Grupo ${indice + 1}/${originais.length} · ${escapar(rotuloDoGrupo(destino, item))}`;
+    const url = escapar(destino);
+    if (item?.resultado === 'publicado') return `<div class="fila-item ok">✓ ${grupo} — publicado às ${formatarData(item.quando)}<br><small>${url}</small>${resumoMensagemUsada(item)}</div>`;
+    if (item?.resultado === 'falhou') return `<div class="fila-item erro">✕ ${grupo} — falhou: ${escapar(item.erro || 'erro não confirmado')}<br><small>${url}</small>${resumoMensagemUsada(item)}</div>`;
+    if (campanha.destinos[0] === destino && !execucao.pausada && execucao.fase !== 'parado') return `<div class="fila-item preparando">● ${grupo} — preparando...<br><small>${url}</small></div>`;
+    return `<div class="fila-item">○ ${grupo}<br><small>${url}</small></div>`;
   }).join('');
 }
 
-async function renderizarCampanhas() {
-  const estado = await armazenamento.carregarEstado();
+async function renderizarCampanhas(estadoAtual = null) {
+  const estado = estadoAtual || await armazenamento.carregarEstado();
   const campanhasLista = estado.campanhas || [];
+  const resultados = new Map();
+  for (const item of estado.historico || []) {
+    if (!resultados.has(item.campanhaId)) resultados.set(item.campanhaId, new Map());
+    resultados.get(item.campanhaId).set(item.destino, item.resultado);
+  }
+  const assinatura = JSON.stringify(campanhasLista.map(c => [c.id, c.status, c.destinos.length, c.textos.length, c.agendadoPara, Array.from(resultados.get(c.id) || [])]));
+  if (assinatura === assinaturaListaCampanhas) return;
+  assinaturaListaCampanhas = assinatura;
 
   const ativas = campanhasLista.filter(c => c.status === 'ativa').length;
   $('contagem').textContent = `${ativas} campanha(s) ativa(s) de ${campanhasLista.length} no total.`;
@@ -159,20 +203,25 @@ async function renderizarCampanhas() {
     return;
   }
 
-  $('lista-campanhas').innerHTML = campanhasLista.map(c => `
+  $('lista-campanhas').innerHTML = campanhasLista.map(c => {
+    const resultadosGrupo = resultados.get(c.id) || new Map();
+    const publicados = Array.from(resultadosGrupo.values()).filter(resultado => resultado === 'publicado').length;
+    const falhas = Array.from(resultadosGrupo.values()).filter(resultado => resultado === 'falhou').length;
+    return `
     <div class="cartao-campanha">
       <h3>${escapar(c.nome)} <span class="status ${c.status}">${c.status}</span></h3>
       <div class="meta">
         ${c.destinos.length} destino(s) · ${c.textos.length} texto(s) ·
         ${c.agendadoPara ? 'agendada para ' + formatarData(c.agendadoPara) : 'sem agendamento'} ·
-        publicado ${c.publicado} · falhou ${c.falhou}
+        publicado ${publicados} · falhou ${falhas}
       </div>
       <div class="acoes">
         <button class="botao-link" data-acao="editar" data-id="${c.id}">Editar</button>
         <button class="botao-link" data-acao="reutilizar" data-id="${c.id}">Usar novamente</button>
         <button class="botao-link perigo" data-acao="excluir" data-id="${c.id}">Excluir</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   document.querySelectorAll('[data-acao]').forEach(botao => {
     botao.addEventListener('click', () => {
@@ -218,8 +267,8 @@ $('botao-salvar-ritmo').addEventListener('click', async () => {
   const estado = await armazenamento.carregarEstado();
   const minimo = Number($('campo-delay-min').value);
   const maximo = Number($('campo-delay-max').value);
-  if (!Number.isInteger(minimo) || !Number.isInteger(maximo) || minimo < 600 || maximo > 7200 || minimo > maximo) {
-    $('ritmo-salvo').textContent = 'Informe valores inteiros entre 600 e 7200, com o mínimo menor ou igual ao máximo.';
+  if (!Number.isInteger(minimo) || !Number.isInteger(maximo) || minimo < 600 || maximo > 86400 || minimo > maximo) {
+    $('ritmo-salvo').textContent = 'Informe valores inteiros entre 600 e 86400, com o mínimo menor ou igual ao máximo.';
     $('ritmo-salvo').classList.remove('oculta');
     return;
   }
@@ -245,7 +294,6 @@ async function abrirForm(nova) {
     renderizarCamposMensagens(['']);
     $('campo-destinos').value = '';
     $('campo-agendar').checked = false;
-    $('campo-responsabilidade').checked = false;
     $('campo-horario').classList.add('oculta');
     $('preview-imagem').classList.add('oculta');
     imagemSelecionada = null;
@@ -271,7 +319,6 @@ async function editarCampanha(id) {
   $('campo-destinos').value = (campanha.destinosOriginais || campanha.destinos || []).join('\n');
   $('contador-destinos').textContent = `${(campanha.destinosOriginais || campanha.destinos || []).length} destino(s)`;
   $('campo-agendar').checked = Boolean(campanha.agendadoPara);
-  $('campo-responsabilidade').checked = true;
   $('campo-horario').classList.toggle('oculta', !$('campo-agendar').checked);
   if (campanha.agendadoPara) $('campo-horario').value = new Date(campanha.agendadoPara).toISOString().slice(0, 16);
   imagemSelecionada = null;
@@ -297,7 +344,6 @@ async function reutilizarCampanha(id) {
   $('campo-nome').value = `${original.nome} (cópia)`;
   renderizarCamposMensagens(original.textos || ['']);
   $('campo-destinos').value = (original.destinosOriginais || original.destinos || []).join('\n');
-  $('campo-responsabilidade').checked = false;
   if (original.imagemId) {
     const blob = await armazenamento.buscarImagem(original.imagemId).catch(() => null);
     if (blob) {
@@ -434,7 +480,6 @@ async function salvarCampanha(modo = 'salvar') {
   $('erro-form').classList.add('oculta');
   try {
     const postarAgora = modo === 'agora';
-    if (!$('campo-responsabilidade').checked) throw new Error('Confirme que você pode publicar nesses grupos e que a mensagem respeita as regras do grupo.');
     if (postarAgora && $('campo-agendar').checked) throw new Error('Desmarque o agendamento para iniciar agora.');
     if (!postarAgora && !$('campo-agendar').checked) throw new Error('Marque “Agendar publicação” antes de agendar a campanha.');
 
@@ -496,7 +541,7 @@ $('botao-retomar').addEventListener('click', async () => {
   const estado = await armazenamento.carregarEstado();
   const texto = estado.execucao?.confirmacaoPendente
     ? 'Confira no Facebook se a postagem foi publicada. Ao retomar, este grupo será marcado como não confirmado e ignorado para evitar duplicação. Deseja continuar com os próximos grupos?'
-    : 'Retomar a campanha e iniciar os próximos grupos?';
+    : 'Retomar a campanha? Grupos com falha antes do envio serão tentados novamente; resultados incertos serão ignorados para evitar duplicatas.';
   if (!confirm(texto)) return;
   await chrome.runtime.sendMessage({ tipo: 'retomar-campanha' });
   renderizarStatus(await armazenamento.carregarEstado());
@@ -505,4 +550,4 @@ $('botao-encerrar').addEventListener('click', async () => { if (!confirm('Encerr
 
 carregarResumoLicenca();
 
-setInterval(async () => { try { renderizarStatus(await armazenamento.carregarEstado()); } catch (_) {} }, 3000);
+setInterval(async () => { try { const estado = await armazenamento.carregarEstado(); renderizarStatus(estado); await renderizarCampanhas(estado); } catch (_) {} }, 3000);

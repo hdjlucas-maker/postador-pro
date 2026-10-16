@@ -13,7 +13,7 @@ function iniciarContent({ document, date = Date, setTimeoutFn = setTimeout }) {
       sendMessage: async () => ({ ok: true })
     }
   };
-  vm.runInNewContext(fonte, { chrome, document, location: { pathname: '/groups/123456789' }, Date: date, setTimeout: setTimeoutFn, console });
+  vm.runInNewContext(fonte, { chrome, document, location: { pathname: '/groups/123456789', href: 'https://www.facebook.com/groups/123456789', origin: 'https://www.facebook.com' }, URL, Date: date, setTimeout: setTimeoutFn, console });
   return mensagem => new Promise(resolve => listener(mensagem, {}, resolve));
 }
 
@@ -48,7 +48,7 @@ test('ignora editor de comentário dentro de article quando não há compositor 
   let now = 0;
   class DateAcelerada extends Date { static now() { now += 20000; return now; } }
   const receber = iniciarContent({ document, date: DateAcelerada, setTimeoutFn: fn => { fn(); return 0; } });
-  const resultado = await receber({ tipo: 'publicar', texto: 'Mensagem de teste' });
+  const resultado = await receber({ tipo: 'publicar', texto: 'Mensagem de teste', grupoEsperado: 'https://www.facebook.com/groups/123456789' });
   assert.equal(resultado.ok, false);
   assert.match(resultado.erro, /Nenhuma publicação foi enviada|Nenhum comentário foi enviado/);
   assert.equal(editorComentario.isConnected, true);
@@ -62,9 +62,14 @@ test('usa somente o editor e o botão dentro do diálogo de nova publicação', 
   };
   const comentario = elemento({ artigo: {}, texto: 'Comentário' });
   const editorPublicacao = elemento({ dialogo, texto: '' });
+  const publicacoesNoFeed = [];
   const botaoComentario = elemento({ artigo: {}, texto: 'Post' });
   let cliquesNoPublicar = 0;
-  const botaoPublicar = elemento({ dialogo, texto: 'Post', click: () => { cliquesNoPublicar += 1; dialogo.isConnected = false; } });
+  const botaoPublicar = elemento({ dialogo, texto: 'Post', click: () => {
+    cliquesNoPublicar += 1;
+    dialogo.isConnected = false;
+    publicacoesNoFeed.push(elemento({ texto: 'Nova publicação segura' }));
+  } });
   const document = {
     body: { innerText: '' },
     execCommand(acao, _ui, valor) {
@@ -72,15 +77,19 @@ test('usa somente o editor e o botão dentro do diálogo de nova publicação', 
       return true;
     },
     querySelectorAll(seletor) {
+      if (seletor.includes('article')) return publicacoesNoFeed;
       if (seletor.includes('contenteditable') || seletor.includes('aria-label="Escreva"')) return [comentario, editorPublicacao];
       if (seletor.includes('aria-label="Publicar"') || seletor.includes('button[type="submit"]')) return [botaoPublicar];
       if (seletor === '[role="button"], button, [aria-label]') return [botaoComentario, botaoPublicar];
       return [];
     }
   };
-  const receber = iniciarContent({ document, setTimeoutFn: fn => { fn(); return 0; } });
-  const resultado = await receber({ tipo: 'publicar', texto: 'Nova publicação segura', cadenciaMin: 1, cadenciaMax: 1 });
-  assert.equal(resultado.ok, true);
+  let now = 0;
+  class DateAcelerada extends Date { static now() { now += 20000; return now; } }
+  const receber = iniciarContent({ document, date: DateAcelerada, setTimeoutFn: fn => { fn(); return 0; } });
+  const resultado = await receber({ tipo: 'publicar', texto: 'Nova publicação segura', cadenciaMin: 1, cadenciaMax: 1, grupoEsperado: 'https://www.facebook.com/groups/123456789' });
+  console.log('resultado simulado:', resultado);
+  assert.equal(resultado.ok, true, resultado.erro);
   assert.equal(editorPublicacao.textContent, 'Nova publicação segura');
   assert.equal(cliquesNoPublicar, 1);
   assert.equal(botaoComentario.isConnected, true);
@@ -105,7 +114,7 @@ test('não clica em Publicar quando o editor não aceita o texto', async () => {
     }
   };
   const receber = iniciarContent({ document, setTimeoutFn: fn => { fn(); return 0; } });
-  const resultado = await receber({ tipo: 'publicar', texto: 'Texto que o editor recusa', cadenciaMin: 1, cadenciaMax: 1 });
+  const resultado = await receber({ tipo: 'publicar', texto: 'Texto que o editor recusa', cadenciaMin: 1, cadenciaMax: 1, grupoEsperado: 'https://www.facebook.com/groups/123456789' });
   assert.equal(resultado.ok, false);
   assert.match(resultado.erro, /não aceitou o texto/);
   assert.match(resultado.erro, /Nenhuma publicação foi enviada/);

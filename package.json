@@ -1,6 +1,6 @@
 {
   "name": "postador-pro",
-  "version": "1.0.25",
+  "version": "1.0.33",
   "private": true,
   "description": "Extensão de navegador para divulgação em grupos do Facebook, com API de assinatura em Cloudflare Workers e cobrança pela InfinitePay",
   "scripts": {

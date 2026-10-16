@@ -130,6 +130,8 @@ formLogin.addEventListener('submit', async evento => {
   botaoEntrar.textContent = 'Entrando…';
 
   try {
+    await chamar('/api/config', undefined, 'GET');
+
     const dados = await chamar('/api/login', {
       email: document.getElementById('email').value,
       senha: document.getElementById('senha').value

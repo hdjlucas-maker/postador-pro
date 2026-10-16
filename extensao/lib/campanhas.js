@@ -109,6 +109,7 @@ async function criarCampanha(dados, limites) {
     id: `c_${Date.now()}_${aleatorio(1000, 9999)}`,
     nome: String(dados.nome).trim(),
     textos: (dados.textos || []).filter(t => String(t).trim()),
+    proximoTextoIndice: 0,
     destinos: (dados.destinos || []).filter(d => String(d).trim()),
     destinosOriginais: (dados.destinos || []).filter(d => String(d).trim()),
     imagemId: dados.imagemId || null,
@@ -155,7 +156,7 @@ async function excluirCampanha(id) {
   await armazenamento.salvarEstado(estado);
 }
 
-async function registrarResultado(campanhaId, destino, resultado, erroDetalhado = '', textoUsado = '') {
+async function registrarResultado(campanhaId, destino, resultado, erroDetalhado = '', textoUsado = '', grupo = {}) {
   const estado = await armazenamento.carregarEstado();
   const campanha = estado.campanhas.find(c => c.id === campanhaId);
   if (!campanha) return;
@@ -168,6 +169,10 @@ async function registrarResultado(campanhaId, destino, resultado, erroDetalhado 
     campanhaId,
     campanhaNome: campanha.nome,
     destino,
+    grupoId: grupo.grupoId || '',
+    grupoNome: grupo.grupoNome || '',
+    variacaoIndice: Number(grupo.variacaoIndice) || 0,
+    totalVariacoes: Number(grupo.totalVariacoes) || 0,
     resultado,
     erro: erroDetalhado || '',
     texto: textoUsado || '',

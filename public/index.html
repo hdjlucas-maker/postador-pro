@@ -7,7 +7,7 @@
 <meta name="description" content="Extensão para Chrome que organiza campanhas com texto, imagem e grupos do Facebook.">
 <meta name="theme-color" content="#1877f2">
 <link rel="icon" type="image/png" href="/assets/favicon.png">
-<link rel="stylesheet" href="/assets/estilo.css?v=20261005-3">
+<link rel="stylesheet" href="/assets/estilo.css?v=20261015-1">
 </head>
 <body>
 <header class="tarja">
@@ -52,7 +52,7 @@
       <h2>O que é entregue</h2>
       <div class="grade grade-2">
         <div class="cartao entrega"><h3>Arquivo da extensão</h3><p>Um arquivo <code>postador-pro.zip</code> para baixar nesta página e instalar no Chrome.</p><a class="botao secundario" href="/downloads/postador-pro.zip" download="postador-pro.zip">Baixar arquivo</a></div>
-        <div class="cartao entrega"><h3>Conta e licença</h3><p>Depois de instalar, você cria uma conta na extensão. A licença de avaliação dura 7 dias.</p></div>
+        <div class="cartao entrega"><h3>Conta e licença</h3><p>Depois de instalar, você cria uma conta na extensão. A licença de avaliação dura 30 dias.</p></div>
         <div class="cartao entrega"><h3>Dados das campanhas no navegador</h3><p>Textos, imagens, grupos e histórico das campanhas ficam armazenados no navegador do usuário.</p></div>
         <div class="cartao entrega"><h3>Planos pagos</h3><p>Depois da avaliação, a extensão oferece pagamento mensal ou anual pela InfinitePay. Não há cobrança automática.</p></div>
       </div>
@@ -75,7 +75,7 @@
     <section class="secao" id="planos">
       <span class="selo">04 — PLANOS</span>
       <h2>Planos e limites</h2>
-      <p class="intro">Todos começam com 7 dias de avaliação. O usuário escolhe o plano dentro da extensão, no botão <strong>Assinar / Renovar</strong>.</p>
+      <p class="intro">Todos começam com 30 dias de avaliação. Depois, o usuário escolhe e paga um plano dentro da extensão, no botão <strong>Assinar / Renovar</strong>. Não há cobrança automática.</p>
       <div class="grade grade-2" id="lista-planos"><div class="cartao"><p>Carregando planos…</p></div></div>
       <div class="cartao limites-resumo"><h3>Durante a avaliação</h3><p><strong id="limite-trial">10 grupos por dia</strong>, até 3 campanhas ativas e até 5 destinos por campanha.</p></div>
     </section>
@@ -107,8 +107,16 @@
     </section>
   </div>
 </main>
+<div id="aceite-download" class="aceite-download" hidden role="dialog" aria-modal="true" aria-labelledby="aceite-download-titulo">
+  <div class="aceite-download-cartao">
+    <h2 id="aceite-download-titulo">Antes de baixar</h2>
+    <p>Você é responsável pelo conteúdo, pelos grupos escolhidos, pela frequência das publicações e por respeitar os Termos da Meta e as regras de cada grupo. Remoções de publicações ou restrições à conta decorrentes do uso são de sua responsabilidade.</p>
+    <label class="aceite-download-check"><input id="aceite-download-checkbox" type="checkbox"> Li e aceito os <a href="/termos" target="_blank" rel="noopener">Termos de Uso</a> e esta responsabilidade.</label>
+    <div class="aceite-download-acoes"><button id="aceite-download-confirmar" class="botao" type="button" disabled>Aceitar e baixar</button><button id="aceite-download-cancelar" class="botao secundario" type="button">Cancelar</button></div>
+  </div>
+</div>
 <footer class="rodape"><div class="centralizado"><span>Postador Pro — extensão para Chrome</span><span class="assinatura-rodape">Desenvolvido por <strong>Devlucas</strong></span><nav><a class="link-suave" href="https://wa.me/5521985390734" target="_blank" rel="noopener">WhatsApp</a><a class="link-suave" href="/termos">Termos de uso</a><a class="link-suave" href="/privacidade">Privacidade</a></nav></div></footer>
 <script src="/assets/comum.js?v=20261005-3"></script>
-<script src="/assets/instalar.js?v=20261005-3"></script>
+<script src="/assets/instalar.js?v=20261015-1"></script>
 </body>
 </html>

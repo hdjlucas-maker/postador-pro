@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" sizes="128x128" href="../icons/icon128.png">
+  <title>Postador Pro — Campanhas</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="centralizado">
+    <header class="tarja">
+      <span class="marca"><img src="../icons/icon48.png" alt="" class="logo-marca"> <span>Postador Pro</span></span>
+      <span id="resumo-licenca" class="resumo">Verificando…</span>
+      <nav class="ajuda-topo"><button id="atalho-faq" type="button">❓ FAQ</button><a href="https://wa.me/5521985390734" target="_blank" rel="noopener">WhatsApp</a><a href="mailto:aservicos17@gmail.com">E-mail</a></nav>
+    </header>
+
+    <main>
+      <section id="secao-boas-vindas" class="oculta">
+        <div class="hero-boas-vindas"><img src="../assets/postador-hero.webp" alt="Pessoa organizando divulgações em grupos do Facebook"><div class="hero-conteudo"><span class="selo">POSTADOR PRO</span><h2>Bem-vindo ao Postador Pro</h2><p class="hero-chamada">Mais organização para sua divulgação.</p></div></div>
+        <p>O Postador Pro publica seus produtos nos grupos do Facebook em que você já está logado. Tudo fica no seu navegador; o servidor só cuida da sua assinatura.</p>
+        <ol>
+          <li>Crie uma campanha com texto, imagem e grupos.</li>
+          <li>Escolha agendar ou publicar agora.</li>
+          <li>A extensão publica com ritmo controlado para não derrubar sua conta.</li>
+        </ol>
+        <p class="aviso"><strong>Importante:</strong> o agendamento só dispara com o navegador aberto. Divulgar em grupos do Facebook segue as regras da plataforma; a responsabilidade é sua.</p>
+      </section>
+
+      <section id="secao-campanhas" class="oculta">
+        <div class="painel-hero">
+          <div class="painel-hero-texto">
+            <span class="selo">🚀 PAINEL DE OPERAÇÃO</span><span class="selo selo-verde">🛡️ Segurança ativa</span>
+            <h2>Pronto para divulgar?</h2>
+            <p>Crie sua campanha, escolha os grupos e deixe o Postador Pro organizar o trabalho no seu navegador.</p>
+          </div>
+          <div class="painel-hero-emoji">📣</div>
+        </div>
+        <div class="atalhos-recursos">
+          <button class="recurso" id="atalho-nova" type="button"><span>✍️</span><strong>Nova campanha</strong><small>Texto, imagem e destinos</small></button>
+          <div class="recurso"><span>🖼️</span><strong>Imagem</strong><small>Adicione uma foto ao anúncio</small></div>
+          <div class="recurso"><span>⏰</span><strong>Agendamento</strong><small>Escolha o melhor horário</small></div>
+          <button class="recurso" id="atalho-ritmo" type="button"><span>🛡️</span><strong>Ritmo controlado</strong><small id="resumo-ritmo">Intervalo entre grupos</small></button>
+          <button class="recurso" id="atalho-feedback" type="button"><span>💬</span><strong>Avaliar ferramenta</strong><small>Conte o que devemos melhorar</small></button>
+        </div>
+        <div class="painel-status" id="painel-status-execucao">
+          <div><strong id="status-campanha">Status da campanha</strong><span id="status-execucao" aria-live="polite">Parado</span></div>
+          <p id="detalhe-execucao" aria-live="polite">Nenhuma execução em andamento.</p>
+          <progress id="status-barra" value="0" max="1" aria-label="Progresso da campanha"></progress>
+          <p id="status-progresso">0 / 0 grupos concluídos</p>
+          <div class="status-contadores"><span>Concluídos: <b id="status-concluidos">0</b></span><span>Falhas: <b id="status-falhas">0</b></span><span>Restantes: <b id="status-restantes">0</b></span></div>
+          <p><strong>Próxima publicação:</strong> <span id="status-proxima">—</span></p>
+          <div class="linha"><button id="botao-pausar" class="botao secundario">Pausar</button><button id="botao-retomar" class="botao oculta">Retomar campanha</button><button id="botao-encerrar" class="botao-link perigo">Encerrar campanha</button></div>
+        </div>
+        <div id="fila-visual" class="fila-visual"></div>
+        <div class="linha">
+          <h2>Campanhas</h2>
+          <button id="botao-nova" class="botao">+ Nova campanha</button>
+        </div>
+        <p id="contagem" class="suave"></p>
+        <div id="lista-campanhas"></div>
+      </section>
+
+      <section id="secao-ajuda" class="oculta">
+        <h2>Ajuda e perguntas frequentes</h2>
+        <div class="faq-item"><strong>Como publicar imediatamente?</strong><p>Crie a campanha e clique em <b>Postar agora</b>. A extensão publica um grupo por vez.</p></div>
+        <div class="faq-item"><strong>Como funciona o intervalo?</strong><p>O Ritmo controlado espera entre uma publicação e outra. O navegador precisa continuar aberto para a fila continuar.</p></div>
+        <div class="faq-item"><strong>Como agendar?</strong><p>Marque Agendar publicação, escolha um horário pelo menos 2 minutos à frente e clique em Agendar campanha. Deixe o Chrome aberto e o Facebook conectado.</p></div>
+        <div class="faq-item"><strong>Posso usar imagem e emojis?</strong><p>Sim. A mensagem aceita emojis e a campanha pode ter uma imagem. No Facebook, o compositor precisa estar disponível e você precisa estar logado.</p></div>
+        <div class="faq-item"><strong>O Postador garante curtidas ou reações?</strong><p>Não. Ele organiza e publica o conteúdo; curtidas e reações dependem das pessoas e do Facebook. A ferramenta não cria interações artificiais.</p></div>
+        <div class="faq-item"><strong>Limite recomendado</strong><p>Use no máximo 5 grupos por dia em contas novas. Para contas estabelecidas, mantenha até 10 grupos por dia, com 10 a 15 minutos entre posts. Se precisar de mais, divida em turnos com uma pausa longa.</p></div>
+        <div class="faq-item"><strong>Uso responsável</strong><p>Publique somente onde você tem permissão, respeite as regras de cada grupo, evite repetir a mesma mensagem e pare se o Facebook mostrar um aviso. A extensão não publica comentários, não curte e não cria reações.</p></div>
+        <div class="faq-item"><strong>O que verificar quando não publicar?</strong><p>Confirme que está usando a versão atual, que o Facebook está aberto e conectado, e que cada grupo foi colocado em uma linha com um link válido. Se continuar, envie a mensagem exibida pelo painel ao suporte.</p></div>
+        <p class="suave">Dúvidas ou sugestões? Fale pelo <a href="https://wa.me/5521985390734" target="_blank" rel="noopener">WhatsApp</a> ou pelo e-mail <a href="mailto:aservicos17@gmail.com">aservicos17@gmail.com</a>.</p>
+        <button id="botao-voltar-ajuda" class="botao secundario" type="button">Voltar ao painel</button>
+      </section>
+
+      <section id="secao-ritmo" class="oculta">
+        <h2>Ritmo controlado</h2>
+        <p>Defina uma faixa aleatória para o intervalo entre novas postagens. A extensão publica um grupo por vez. O padrão é de 10 a 20 minutos.</p>
+        <label for="campo-delay-min">Intervalo mínimo entre grupos (segundos)</label>
+        <input id="campo-delay-min" type="number" min="600" max="86400" step="1" value="600">
+        <label for="campo-delay-max">Intervalo máximo entre grupos (segundos)</label>
+        <input id="campo-delay-max" type="number" min="600" max="86400" step="1" value="1200">
+        <p class="suave">Padrão: 10 a 20 minutos. Você pode aumentar a faixa até 24 horas. A extensão escolhe um intervalo dentro dos valores definidos; mínimo permitido: 10 minutos.</p>
+        <p class="suave">Essa configuração não cria curtidas artificiais nem tenta burlar o Facebook. Ela apenas organiza o intervalo das publicações.</p>
+        <div class="linha"><button id="botao-salvar-ritmo" class="botao">Salvar ritmo</button><button id="botao-cancelar-ritmo" class="botao secundario">Voltar</button></div>
+        <p class="ok oculta" id="ritmo-salvo">Ritmo atualizado.</p>
+      </section>
+
+      <section id="secao-form" class="oculta">
+        <h2 id="titulo-form">Nova campanha</h2>
+
+        <label>Nome da campanha</label>
+        <input type="text" id="campo-nome" maxlength="100" placeholder="Ex.: Lançamento Produto X">
+
+        <div class="gerador-ia">
+          <h3>Gerar mensagens com IA grátis</h3>
+          <label for="campo-ia-produto">Produto ou serviço</label>
+          <input type="text" id="campo-ia-produto" maxlength="120" placeholder="Ex.: kit de panelas antiaderentes">
+          <label for="campo-ia-beneficios">Benefícios e fatos reais</label>
+          <textarea id="campo-ia-beneficios" rows="2" maxlength="500" placeholder="Ex.: 5 peças, compatível com fogão a gás, entrega em São Paulo"></textarea>
+          <label for="campo-ia-publico">Público (opcional)</label>
+          <input type="text" id="campo-ia-publico" maxlength="160" placeholder="Ex.: pessoas montando a primeira cozinha">
+          <label for="campo-ia-link">Link da oferta (opcional)</label>
+          <input type="text" id="campo-ia-link" maxlength="300" placeholder="https://...">
+          <div class="linha">
+            <label for="campo-ia-tom">Tom</label>
+            <select id="campo-ia-tom"><option value="amigavel">Amigável</option><option value="direto">Direto</option><option value="entusiasmado">Entusiasmado</option><option value="elegante">Elegante</option></select>
+            <label for="campo-ia-objetivo">Chamada para ação</label>
+            <select id="campo-ia-objetivo"><option value="link">Conhecer a oferta</option><option value="seguir">Seguir página/perfil</option><option value="curtir">Curtir se tiver interesse</option><option value="mensagem">Pedir informações</option></select>
+          </div>
+          <button type="button" id="botao-ia-gerar" class="botao secundario">Gerar 3 variações</button>
+          <p id="ia-status" class="suave" aria-live="polite">Até 10 gerações por conta e 20 no total por dia. Não inclua dados pessoais.</p>
+          <p class="suave">Os dados informados são enviados ao Postador Pro para gerar os textos. Confira cada mensagem e os fatos antes de publicar.</p>
+        </div>
+
+        <label>Mensagens da publicação <span class="suave">(uma mensagem completa por grupo, alternadas na ordem da lista)</span></label>
+        <div class="atalhos-emoji" aria-label="Adicionar emoji">
+          <button type="button" data-emoji="😀">😀</button><button type="button" data-emoji="👍">👍</button><button type="button" data-emoji="🔥">🔥</button><button type="button" data-emoji="🎉">🎉</button><button type="button" data-emoji="🚀">🚀</button><button type="button" data-emoji="💰">💰</button><button type="button" data-emoji="✅">✅</button>
+        </div>
+        <div id="lista-mensagens"></div>
+        <button type="button" id="botao-adicionar-mensagem" class="botao secundario">+ Adicionar outra mensagem</button>
+        <p class="suave">Cada caixa é uma mensagem independente; parágrafos dentro dela ficam juntos. A campanha usa a mensagem 1 no primeiro grupo, a 2 no segundo e assim por diante; depois da última, volta à primeira. A fila mostra qual mensagem foi usada em cada destino.</p>
+        <p class="suave" id="contador-texto">0 mensagem(ns)</p>
+
+        <label>Imagem (opcional)</label>
+        <input type="file" id="campo-imagem" accept="image/*">
+        <div id="preview-imagem" class="oculta"><img id="miniatura" alt=""><button id="remover-imagem" class="botao-link">Remover imagem</button></div>
+
+        <label>Grupos de destino (um link ou ID por linha)</label>
+        <textarea id="campo-destinos" rows="5" placeholder="https://www.facebook.com/groups/123456789 ou 123456789"></textarea>
+        <p class="suave" id="contador-destinos">0 destinos</p>
+
+        <label><input type="checkbox" id="campo-agendar"> Agendar publicação</label>
+        <input type="datetime-local" id="campo-horario" class="oculta">
+
+        <div class="preparacao" id="preparacao-campanha">
+          <h3>Pré-visualização da campanha</h3>
+          <p><strong>Campanha:</strong> <span id="preview-nome">—</span></p>
+          <p><strong>Grupos selecionados:</strong> <span id="preview-grupos">0</span></p>
+          <p><strong>Imagem:</strong> <span id="preview-imagem-texto">não configurada</span></p>
+          <p><strong>Texto:</strong> <span id="preview-texto">não configurado</span></p>
+          <p><strong>Intervalo:</strong> <span id="preview-intervalo">10–20 minutos</span></p>
+          <p><strong>Primeira publicação:</strong> <span id="preview-inicio">agora</span></p>
+        </div>
+        <div class="linha">
+          <button id="botao-postar-agora" class="botao">🚀 INICIAR PUBLICAÇÃO</button>
+          <button id="botao-salvar" class="botao secundario">⏰ Agendar campanha</button>
+          <button id="botao-cancelar" class="botao secundario">Cancelar</button>
+        </div>
+        <p class="suave">Entre grupos haverá um intervalo aleatório dentro da faixa configurada (padrão: 10 a 20 minutos). A extensão publica somente uma nova postagem no grupo, nunca comentários ou reações. O Chrome deve permanecer aberto.</p>
+        <p class="erro oculta" id="erro-form"></p>
+      </section>
+    </main>
+  </div>
+  <script src="options.js" type="module"></script>
+</body>
+</html>

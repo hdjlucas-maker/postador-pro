@@ -1,7 +1,8 @@
 'use strict';
 
-// Licença: consulta o servidor, guarda o estado e tem carência offline para
-// não cobrar o cliente por falha nossa. Ao vencer, a extensão para de publicar.
+// Licença: o servidor é a fonte da verdade. A publicação exige uma consulta
+// atual ao servidor e falha fechada sem conexão; a carência offline serve só
+// para exibir o estado no popup, nunca para iniciar uma publicação.
 
 import { CONFIG } from './config.js';
 import * as armazenamento from './armazenamento.js';
@@ -36,16 +37,24 @@ function acessoPermitido(acesso) {
   return Boolean(acesso && acesso.permitido);
 }
 
+function validadeLocal(estado) {
+  const licenca = estado.licenca || {};
+  const data = licenca.plano === 'pro' ? licenca.expiraEm : licenca.avaliacaoAte;
+  const instante = Date.parse(data || '');
+  return Number.isFinite(instante) && instante > Date.now();
+}
+
 // Carência offline: se a última verificação foi há menos de CARENCIA_OFFLINE_MS
 // e o acesso estava permitido, continua valendo mesmo sem conseguir falar com o
 // servidor agora.
 function temCarencia(estado) {
   if (!estado.acesso || !acessoPermitido(estado.acesso)) return false;
+  if (!validadeLocal(estado)) return false;
   if (!estado.ultimaVerificacao) return false;
   return Date.now() - estado.ultimaVerificacao < CONFIG.CARENCIA_OFFLINE_MS;
 }
 
-async function verificarLicenca(forcar = false) {
+async function verificarLicenca(forcar = false, exigirServidor = false) {
   const estado = await armazenamento.carregarEstado();
 
   // Sem token, não há o que verificar.
@@ -56,7 +65,7 @@ async function verificarLicenca(forcar = false) {
   const agora = Date.now();
   const passou = agora - (estado.ultimaVerificacao || 0) > CONFIG.VERIFICAR_LICENCA_MINUTOS * 60000;
 
-  if (!forcar && !passou && estado.acesso) {
+  if (!forcar && !passou && estado.acesso && validadeLocal(estado)) {
     return { acesso: estado.acesso, permitido: acessoPermitido(estado.acesso), status: estado.acesso.status };
   }
 
@@ -68,8 +77,17 @@ async function verificarLicenca(forcar = false) {
     await armazenamento.salvarEstado(estado);
     return { acesso: dados.acesso, permitido: acessoPermitido(dados.acesso), status: dados.acesso.status, licenca: dados.licenca };
   } catch (erro) {
+    // Respostas de autenticação/acesso negado são decisões do servidor, não
+    // falhas de rede. Nunca as converte em permissão offline.
+    if (erro.status === 401 || erro.status === 402) {
+      const status = erro.codigo === 'acesso_expirado' ? 'expirado' : 'nao_autenticado';
+      estado.acesso = { permitido: false, status };
+      estado.ultimaVerificacao = Date.now();
+      await armazenamento.salvarEstado(estado);
+      return { acesso: estado.acesso, permitido: false, status };
+    }
     // Sem rede ou servidor fora: vale a carência se o acesso era válido.
-    if (permaneceCarencia(estado)) {
+    if (!exigirServidor && permaneceCarencia(estado)) {
       return { acesso: estado.acesso, permitido: true, status: estado.acesso.status, carencia: true };
     }
     throw erro;
@@ -78,6 +96,7 @@ async function verificarLicenca(forcar = false) {
 
 function permaneceCarencia(estado) {
   if (!estado.acesso || !acessoPermitido(estado.acesso)) return false;
+  if (!validadeLocal(estado)) return false;
   if (!estado.ultimaVerificacao) return false;
   return Date.now() - estado.ultimaVerificacao < CONFIG.CARENCIA_OFFLINE_MS;
 }
@@ -148,6 +167,31 @@ async function carregarPlanos() {
   return chamarApi('/api/extensao/planos');
 }
 
+// Limite diário do servidor: consulta se o usuário ainda pode publicar hoje e
+// registra a publicação após confirmação. O servidor é a fonte da verdade — a
+// extensão não se autolimita sozinha.
+
+async function verificarPublicacaoHoje() {
+  const dados = await chamarApi('/api/extensao/publicacao/hoje');
+  return {
+    pode: Boolean(dados?.pode),
+    limite: Number(dados?.limite) || 0,
+    contador: Number(dados?.contador) || 0,
+    restante: Number(dados?.restante) || 0
+  };
+}
+
+async function registrarPublicacaoHoje() {
+  const dados = await chamarApi('/api/extensao/publicacao', { metodo: 'POST' });
+  return {
+    ok: Boolean(dados?.ok),
+    limite: Number(dados?.limite) || 0,
+    contador: Number(dados?.contador) || 0,
+    restante: Number(dados?.restante) || 0,
+    erro: dados?.erro || null
+  };
+}
+
 async function gerarTextos(dados) {
   return chamarApi('/api/extensao/gerar-textos', { metodo: 'POST', corpo: dados });
 }
@@ -163,5 +207,7 @@ export {
   carregarPlanos,
   gerarTextos,
   acessoPermitido,
-  permaneceCarencia
+  permaneceCarencia,
+  verificarPublicacaoHoje,
+  registrarPublicacaoHoje
 };

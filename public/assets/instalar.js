@@ -44,6 +44,45 @@ async function carregarPlanos() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  const modalAceite = document.getElementById('aceite-download');
+  const checkboxAceite = document.getElementById('aceite-download-checkbox');
+  const botaoAceitar = document.getElementById('aceite-download-confirmar');
+  const botaoCancelar = document.getElementById('aceite-download-cancelar');
+  const chaveAceite = 'postadorProAceiteDownload-v1';
+  let linkPendente = null;
+  let aceiteNestaPagina = false;
+  try { aceiteNestaPagina = localStorage.getItem(chaveAceite) === 'aceito'; } catch (_) {}
+
+  document.querySelectorAll('a[href^="/downloads/postador-pro.zip"]').forEach(link => {
+    link.addEventListener('click', event => {
+      if (aceiteNestaPagina) return;
+      event.preventDefault();
+      linkPendente = link;
+      modalAceite.hidden = false;
+      checkboxAceite.focus();
+    });
+  });
+  checkboxAceite.addEventListener('change', () => { botaoAceitar.disabled = !checkboxAceite.checked; });
+  botaoAceitar.addEventListener('click', () => {
+    if (!checkboxAceite.checked || !linkPendente) return;
+    aceiteNestaPagina = true;
+    try { localStorage.setItem(chaveAceite, 'aceito'); } catch (_) {}
+    modalAceite.hidden = true;
+    const link = linkPendente;
+    linkPendente = null;
+    link.click();
+  });
+  botaoCancelar.addEventListener('click', () => {
+    checkboxAceite.checked = false;
+    botaoAceitar.disabled = true;
+    modalAceite.hidden = true;
+    linkPendente?.focus();
+    linkPendente = null;
+  });
+  modalAceite.addEventListener('keydown', event => {
+    if (event.key === 'Escape') botaoCancelar.click();
+  });
+
   limitar(document.getElementById('email'), 254);
   carregarPlanos().catch(() => {});
 });

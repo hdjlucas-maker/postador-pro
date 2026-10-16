@@ -621,6 +621,49 @@ async function payments_removerPorUsuario(env, userId) {
   await env.DB.prepare('DELETE FROM payments WHERE user_id = ?').bind(userId).run();
 }
 
+/* ----------------------------------------------------------------- publicações dia */
+
+/**
+ * Conta quantos grupos o usuário publicou hoje (UTC). O dia vem de `data`,
+ * que já deve estar no formato ISO apenas com a data (ex: 2026-10-16).
+ */
+async function publicacoes_contarHoje(env, userId, data) {
+  const row = await env.DB.prepare(
+    'SELECT contador FROM publicacoes_dia WHERE user_id = ? AND data = ?'
+  )
+    .bind(userId, data)
+    .first();
+  return Number(row?.contador || 0);
+}
+
+/**
+ * Incrementa o contador de publicações de hoje de forma atômica.
+ *
+ * Só incrementa se o contador atual for estritamente menor que o `limite`.
+ * Retorna `{ ok: true, contador }` quando conseguiu incrementar, ou
+ * `{ ok: false, contador }` quando o limite já foi atingido. Uma única
+ * instrução garante que duas requisições simultâneas não ultrapassem o teto.
+ */
+async function publicacoes_incrementarHoje(env, userId, data, limite) {
+  const hoje = data || new Date().toISOString().slice(0, 10);
+
+  const row = await env.DB.prepare(
+    `INSERT INTO publicacoes_dia (user_id, data, contador) VALUES (?, ?, 1)
+       ON CONFLICT(user_id, data) DO UPDATE SET
+         contador = CASE
+           WHEN publicacoes_dia.contador < ? THEN publicacoes_dia.contador + 1
+           ELSE publicacoes_dia.contador
+         END
+     RETURNING contador`
+  )
+    .bind(userId, hoje, Number(limite))
+    .first();
+
+  const contador = Number(row?.contador || 0);
+  const ok = contador <= Number(limite) && row !== null;
+  return { ok, contador, hoje };
+}
+
 /* ----------------------------------------------------------------- resets */
 
 function linhaParaReset(row) {
@@ -810,6 +853,9 @@ export {
   payments_contar,
   payments_resumo,
   payments_removerPorUsuario,
+
+  publicacoes_contarHoje,
+  publicacoes_incrementarHoje,
 
   resets_inserir,
   resets_porTokenHash,

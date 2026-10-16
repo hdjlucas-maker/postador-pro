@@ -123,6 +123,20 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 
 CREATE INDEX IF NOT EXISTS idx_ratelimits_expira ON rate_limits (expira_em);
 
+-- -------------------------------------------------------- publicações dia
+-- Conta quantos grupos cada usuário publicou hoje (UTC). É a fonte da verdade
+-- para o limite diário do plano: a extensão consulta o servidor antes de
+-- publicar e o servidor incrementa somente quando a publicação é confirmada.
+CREATE TABLE IF NOT EXISTS publicacoes_dia (
+  user_id  TEXT NOT NULL,
+  data     TEXT NOT NULL,
+  contador INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, data),
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_publicacoes_dia_data ON publicacoes_dia (data);
+
 -- --------------------------------------------------------------- sistema
 -- Uma linha só. O cron diário marca a última limpeza e guarda o instante de
 -- instalação, que substitui o "uptime" do processo.

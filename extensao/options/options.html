@@ -77,11 +77,11 @@
       <section id="secao-ritmo" class="oculta">
         <h2>Ritmo controlado</h2>
         <p>Defina uma faixa aleatória para o intervalo entre novas postagens. A extensão publica um grupo por vez. O padrão é de 10 a 20 minutos.</p>
-        <label for="campo-delay-min">Mínimo entre grupos (segundos)</label>
-        <input id="campo-delay-min" type="number" min="600" max="7200" step="1" value="600">
-        <label for="campo-delay-max">Máximo entre grupos (segundos)</label>
-        <input id="campo-delay-max" type="number" min="600" max="7200" step="1" value="1200">
-        <p class="suave">O próximo intervalo será sorteado dentro dessa faixa. O mínimo permitido é 10 minutos.</p>
+        <label for="campo-delay-min">Intervalo mínimo entre grupos (segundos)</label>
+        <input id="campo-delay-min" type="number" min="600" max="86400" step="1" value="600">
+        <label for="campo-delay-max">Intervalo máximo entre grupos (segundos)</label>
+        <input id="campo-delay-max" type="number" min="600" max="86400" step="1" value="1200">
+        <p class="suave">Padrão: 10 a 20 minutos. Você pode aumentar a faixa até 24 horas. A extensão escolhe um intervalo dentro dos valores definidos; mínimo permitido: 10 minutos.</p>
         <p class="suave">Essa configuração não cria curtidas artificiais nem tenta burlar o Facebook. Ela apenas organiza o intervalo das publicações.</p>
         <div class="linha"><button id="botao-salvar-ritmo" class="botao">Salvar ritmo</button><button id="botao-cancelar-ritmo" class="botao secundario">Voltar</button></div>
         <p class="ok oculta" id="ritmo-salvo">Ritmo atualizado.</p>
@@ -114,13 +114,13 @@
           <p class="suave">Os dados informados são enviados ao Postador Pro para gerar os textos. Confira cada mensagem e os fatos antes de publicar.</p>
         </div>
 
-        <label>Mensagens da publicação <span class="suave">(a ferramenta sorteia uma por grupo)</span></label>
+        <label>Mensagens da publicação <span class="suave">(uma mensagem completa por grupo, alternadas na ordem da lista)</span></label>
         <div class="atalhos-emoji" aria-label="Adicionar emoji">
           <button type="button" data-emoji="😀">😀</button><button type="button" data-emoji="👍">👍</button><button type="button" data-emoji="🔥">🔥</button><button type="button" data-emoji="🎉">🎉</button><button type="button" data-emoji="🚀">🚀</button><button type="button" data-emoji="💰">💰</button><button type="button" data-emoji="✅">✅</button>
         </div>
         <div id="lista-mensagens"></div>
         <button type="button" id="botao-adicionar-mensagem" class="botao secundario">+ Adicionar outra mensagem</button>
-        <p class="suave">Cada caixa é uma mensagem independente; parágrafos dentro dela ficam juntos. Você também pode usar Spintax, por exemplo <code>{oferta especial|oportunidade imperdível}</code>, para variar uma frase dentro de cada mensagem.</p>
+        <p class="suave">Cada caixa é uma mensagem independente; parágrafos dentro dela ficam juntos. A campanha usa a mensagem 1 no primeiro grupo, a 2 no segundo e assim por diante; depois da última, volta à primeira. A fila mostra qual mensagem foi usada em cada destino.</p>
         <p class="suave" id="contador-texto">0 mensagem(ns)</p>
 
         <label>Imagem (opcional)</label>
@@ -132,7 +132,6 @@
         <p class="suave" id="contador-destinos">0 destinos</p>
 
         <label><input type="checkbox" id="campo-agendar"> Agendar publicação</label>
-        <label class="aviso-uso"><input type="checkbox" id="campo-responsabilidade"> Confirmo que posso publicar nesses grupos e que a mensagem respeita as regras de cada grupo.</label>
         <input type="datetime-local" id="campo-horario" class="oculta">
 
         <div class="preparacao" id="preparacao-campanha">
@@ -149,7 +148,7 @@
           <button id="botao-salvar" class="botao secundario">⏰ Agendar campanha</button>
           <button id="botao-cancelar" class="botao secundario">Cancelar</button>
         </div>
-        <p class="suave">Entre grupos haverá um intervalo aleatório de 10 a 20 minutos por padrão. A extensão publica somente uma nova postagem no grupo, nunca comentários ou reações. O Chrome deve permanecer aberto.</p>
+        <p class="suave">Entre grupos haverá um intervalo aleatório dentro da faixa configurada (padrão: 10 a 20 minutos). A extensão publica somente uma nova postagem no grupo, nunca comentários ou reações. O Chrome deve permanecer aberto.</p>
         <p class="erro oculta" id="erro-form"></p>
       </section>
     </main>
