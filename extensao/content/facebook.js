@@ -391,7 +391,11 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
     // Não conseguiu definir files de forma direta.
   }
 
-  return { ok: false };
+  // Nenhuma estratégia conseguiu injetar a imagem no input do Facebook.
+  // Isso ocorre porque navegadores modernos bloqueiam a definição de
+  // input.files por razões de segurança, e o Facebook pode bloquear
+  // injeções de arquivo que não vieram de um upload nativo do usuário.
+  return { ok: false, erroInjecao: true };
 }
 
 function detectarAvisoFacebook() {
@@ -569,6 +573,9 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
     reportarStatus('anexando_imagem', 'Anexando imagem à nova postagem.');
     const anexo = await anexarImagem(imagemDados, imagemTipo, imagemNome);
     if (!anexo.ok) {
+      if (anexo.erroInjecao) {
+        return { ok: false, retentavel: true, erro: 'Não foi possível anexar a imagem ao compositor do Facebook. Isso acontece porque o navegador bloqueia a injeção automática de arquivos por segurança. Tente publicar sem imagem ou entre em contato com o suporte pelo WhatsApp.' };
+      }
       return { ok: false, retentavel: true, erro: 'Não consegui selecionar a imagem no compositor. Confira o arquivo e tente novamente; nenhuma publicação foi enviada.' };
     }
     // Aguarda o Facebook processar internamente o upload da imagem antes de
@@ -582,18 +589,15 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
     // Exibe aviso visual e desabilita o botão "Publicar" para o usuário não
     // clicar prematuramente. Cada máquina/internet demora um tempo diferente,
     // então usamos um tempo base de 3 segundos após a confirmação da prévia.
-    try {
-      const botaoPublicar = await esperarElemento(SELETORES.botaoPublicar, 10000);
-      if (botaoPublicar && botaoPublicar.closest('[role="dialog"]') === dialogo) {
-        const aviso = criarAvisoAguarde(dialogo, botaoPublicar);
-        desabilitarBotaoPublicar(botaoPublicar);
-        reportarStatus('processando_imagem', 'Processando imagem, aguarde antes de publicar.');
-        await esperar(3000);
-        removerAvisoAguarde();
-        reabilitarBotaoPublicar(botaoPublicar);
-      }
-    } catch (_) {
-      // Em ambientes de teste ou se o DOM não estiver disponível, ignora o aviso.
+    const dialogo = compositor.closest('[role="dialog"]');
+    const botaoPublicar = await esperarElemento(SELETORES.botaoPublicar, 10000);
+    if (botaoPublicar && botaoPublicar.closest('[role="dialog"]') === dialogo) {
+      const aviso = criarAvisoAguarde(dialogo, botaoPublicar);
+      desabilitarBotaoPublicar(botaoPublicar);
+      reportarStatus('processando_imagem', 'Processando imagem, aguarde antes de publicar.');
+      await esperar(3000);
+      removerAvisoAguarde();
+      reabilitarBotaoPublicar(botaoPublicar);
     }
   }
   let botaoFinal = await esperarElemento(SELETORES.botaoPublicar, 10000);
