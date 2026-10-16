@@ -237,6 +237,31 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect((await comToken.json()).licenca.email).toBe(email);
   });
 
+  it('concede 7 dias de avaliação e informa quando ela expirou', async () => {
+    const planosResposta = await SELF.fetch('https://api.postador.test/api/extensao/planos');
+    expect(planosResposta.status).toBe(200);
+    expect((await planosResposta.json()).avaliacaoDias).toBe(7);
+
+    const email = novoEmail();
+    const cadastro = await post('/api/extensao/cadastro', {
+      nome: 'Teste Avaliação', email, senha: 'senha-super-segura'
+    }, { Origin: ORIGEM });
+    const dados = await cadastro.json();
+    expect(cadastro.status).toBe(201);
+    expect(Math.round((Date.parse(dados.licenca.avaliacaoAte) - Date.now()) / 86400000)).toBe(7);
+
+    const usuario = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    await env.DB.prepare('UPDATE users SET trial_fim = ? WHERE id = ?')
+      .bind(new Date(Date.now() - 60000).toISOString(), usuario.id)
+      .run();
+
+    const licenca = await SELF.fetch('https://api.postador.test/api/extensao/licenca', {
+      headers: { Origin: ORIGEM, Authorization: `Bearer ${dados.token}` }
+    });
+    expect(licenca.status).toBe(200);
+    expect((await licenca.json()).acesso).toEqual({ permitido: false, status: 'expirado' });
+  });
+
   it('recusa extensão fora da allowlist', async () => {
     const email = novoEmail();
     await post('/api/register', { nome: 'Gabi Rocha', email, senha: 'senha-super-segura' });
