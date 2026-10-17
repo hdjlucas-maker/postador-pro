@@ -260,18 +260,22 @@ async function publicarEmDestino(campanha, destino) {
   const aba = await abrirAbaFacebook(url);
   if (!aba) return { ok: false, erro: 'Não consegui abrir a janela de publicação do Facebook.' };
 
-  // Navega primeiro e espera a página terminar de carregar antes de injetar
-  // o content script. Isso evita tentar publicar em uma aba ainda em branco.
-  await chrome.tabs.update(aba.id, { url });
-  const carregou = await aguardarCarregamentoAba(aba.id, 60000);
-  if (!carregou) return { ok: false, retentavel: true, erro: 'O grupo do Facebook não terminou de carregar em 60 segundos. Nenhuma publicação foi iniciada; esse grupo foi registrado como falha e a fila seguirá para o próximo após o intervalo.' };
-  await esperar(1200);
+  // Espera a aba chegar de fato na página final do grupo (com os
+  // redirecionamentos do Facebook concluídos) antes de injetar o content
+  // script. Esperar só o "carregou" da navegação não bastava: o Facebook
+  // redireciona a página do grupo logo depois e a injeção acontecia no meio
+  // da navegação, falhando em alguns grupos da campanha.
+  const navegacao = await navegarAteGrupo(aba.id, url, 60000);
+  if (!navegacao.ok) return { ...navegacao, retentavel: true };
 
-  try {
-    await chrome.scripting.executeScript({ target: { tabId: aba.id }, files: ['content/facebook.js'] });
-  } catch (erro) {
-    return { ok: false, retentavel: true, erro: 'Não consegui ativar a publicação nesta página do Facebook. Nenhuma publicação foi iniciada.' };
+  let ativacao = await ativarPublicador(aba.id);
+  if (!ativacao.ok) {
+    // Segunda chance: recarrega o grupo do zero. Cobre páginas que ficaram
+    // presas em um estado transitório de erro no Chrome.
+    const recarga = await navegarAteGrupo(aba.id, url, 60000);
+    ativacao = recarga.ok ? await ativarPublicador(aba.id) : recarga;
   }
+  if (!ativacao.ok) return { ...ativacao, retentavel: true };
 
   // Carrega a imagem do IndexedDB e converte para base64. O canal de mensagens
   // do Chrome entre o service worker e a página só transporta JSON: bytes crus
@@ -362,7 +366,7 @@ async function abrirAbaFacebook(urlInicial = 'https://www.facebook.com/') {
     try {
       const abaAntiga = await chrome.tabs.get(idAbaSalvo);
       const host = new URL(abaAntiga.url || '').hostname.toLowerCase();
-      if (['www.facebook.com', 'facebook.com', 'web.facebook.com', 'm.facebook.com'].includes(host)) {
+      if (HOSTS_FACEBOOK.includes(host)) {
         const janela = await chrome.windows.create({
           tabId: abaAntiga.id,
           type: 'popup',
@@ -401,35 +405,98 @@ async function salvarIdsAutomacao(windowId, tabId) {
   }, resolve));
 }
 
-async function aguardarCarregamentoAba(tabId, timeoutMs) {
-  const atual = await chrome.tabs.get(tabId).catch(() => null);
-  if (atual?.status === 'complete') return true;
+// Endereços aceitos do Facebook: o host pode variar (www/web/m) e o ID do
+// grupo, no caminho, é o que identifica a página.
+const HOSTS_FACEBOOK = ['www.facebook.com', 'facebook.com', 'web.facebook.com', 'm.facebook.com'];
 
-  return new Promise(resolve => {
-    let finalizado = false;
-    const concluir = valor => {
-      if (finalizado) return;
-      finalizado = true;
-      clearTimeout(temporizador);
-      chrome.tabs.onUpdated.removeListener(aoAtualizar);
-      resolve(valor);
-    };
-    const aoAtualizar = (id, info) => {
-      if (id === tabId && info.status === 'complete') concluir(true);
-    };
-    const temporizador = setTimeout(() => concluir(false), timeoutMs);
-    chrome.tabs.onUpdated.addListener(aoAtualizar);
-    // Cobre o caso em que a navegação terminou entre o get() e o listener.
-    chrome.tabs.get(tabId).then(tab => {
-      if (tab.status === 'complete') concluir(true);
-    }).catch(() => concluir(false));
-  });
+function ehHostFacebook(endereco) {
+  try {
+    return HOSTS_FACEBOOK.includes(new URL(String(endereco || '')).hostname.toLowerCase());
+  } catch (_) {
+    return false;
+  }
+}
+
+// Compara o endereço atual da aba com o link do grupo esperado. O Facebook
+// costuma completar o endereço (barra no final, parâmetros extras) ou trocar
+// entre www/web/m; o que identifica o grupo é o segmento depois de /groups/.
+export function urlDaAbaPertenceAoGrupo(urlAba, urlEsperada) {
+  if (!ehHostFacebook(urlAba)) return false;
+  const idAtual = extrairIdGrupo(urlAba).toLowerCase();
+  const idEsperado = extrairIdGrupo(urlEsperada).toLowerCase();
+  return Boolean(idAtual && idEsperado) && idAtual === idEsperado;
+}
+
+// Login ou verificação de segurança: a publicação não tem como seguir e a
+// campanha inteira depende dessa sessão, então é melhor avisar do que esperar.
+function paginaDeLoginOuVerificacao(endereco) {
+  try {
+    const caminho = new URL(String(endereco || '')).pathname.toLowerCase();
+    return /^\/(login|checkpoint|recover)(\/|$)/.test(caminho);
+  } catch (_) {
+    return false;
+  }
+}
+
+// Navega até o grupo e só retorna quando a aba estiver realmente na página do
+// grupo, com o carregamento terminado e estável em duas leituras seguidas.
+// Exigir o endereço final evita injetar o content script no meio de um
+// redirecionamento, que é o que fazia a publicação falhar em alguns grupos.
+export async function navegarAteGrupo(tabId, url, timeoutMs) {
+  await chrome.tabs.update(tabId, { url }).catch(() => null);
+  const inicio = Date.now();
+  let leiturasNoGrupo = 0;
+  let leiturasDeLogin = 0;
+  while (Date.now() - inicio < timeoutMs) {
+    const aba = await chrome.tabs.get(tabId).catch(() => null);
+    if (!aba) return { ok: false, erro: 'A aba de publicação do Facebook foi fechada antes de abrir o grupo. Nenhuma publicação foi iniciada.' };
+    const endereco = String(aba.url || '');
+    const parada = aba.status === 'complete' && !aba.pendingUrl;
+    if (parada && urlDaAbaPertenceAoGrupo(endereco, url)) {
+      leiturasNoGrupo += 1;
+      leiturasDeLogin = 0;
+      if (leiturasNoGrupo >= 2) return { ok: true };
+    } else {
+      leiturasNoGrupo = 0;
+      if (parada && ehHostFacebook(endereco) && paginaDeLoginOuVerificacao(endereco)) {
+        leiturasDeLogin += 1;
+        if (leiturasDeLogin >= 2) {
+          return { ok: false, pausar: true, interromperFila: true, erro: 'O Facebook pediu login ou verificação de segurança nesta janela de publicação. Entre na conta do Facebook na janela que a extensão abriu e retome a campanha. Nenhuma publicação foi iniciada.' };
+        }
+      } else {
+        leiturasDeLogin = 0;
+      }
+    }
+    await esperar(500);
+  }
+  return { ok: false, erro: 'O grupo do Facebook não terminou de carregar em 60 segundos. Nenhuma publicação foi iniciada; esse grupo foi registrado como falha e a fila seguirá para o próximo após o intervalo.' };
+}
+
+// Injeta o content script com novas tentativas. O Chrome recusa a injeção se
+// a aba ainda estiver terminando de navegar; insistir alguns segundos resolve
+// o caso comum e, quando não houver jeito, guarda o motivo técnico real para
+// facilitar o suporte.
+export async function ativarPublicador(tabId, tentativas = 3) {
+  let motivo = '';
+  for (let tentativa = 1; tentativa <= tentativas; tentativa += 1) {
+    const aba = await chrome.tabs.get(tabId).catch(() => null);
+    if (!aba) return { ok: false, erro: 'A aba de publicação do Facebook foi fechada antes de iniciar a publicação. Nenhuma publicação foi iniciada.' };
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content/facebook.js'] });
+      return { ok: true };
+    } catch (erro) {
+      motivo = String((erro && erro.message) || erro || '').slice(0, 160);
+      if (tentativa < tentativas) await esperar(1500);
+    }
+  }
+  const detalhe = motivo ? ` Motivo técnico: ${motivo}` : '';
+  return { ok: false, erro: `Não consegui ativar a publicação nesta página do Facebook. Nenhuma publicação foi iniciada; o grupo será registrado como falha e a fila seguirá para o próximo após o intervalo.${detalhe}` };
 }
 
 function montarUrlGrupo(destino) {
   const limpo = String(destino).trim();
   const url = /^https?:\/\//i.test(limpo) ? new URL(limpo) : new URL(`https://www.facebook.com/groups/${encodeURIComponent(limpo)}`);
-  if (!['www.facebook.com', 'facebook.com', 'web.facebook.com', 'm.facebook.com'].includes(url.hostname.toLowerCase()) || !/^\/groups\/[^/]+/.test(url.pathname)) {
+  if (!HOSTS_FACEBOOK.includes(url.hostname.toLowerCase()) || !/^\/groups\/[^/]+/.test(url.pathname)) {
     throw new Error('Destino inválido: informe um link de grupo do Facebook ou o ID do grupo.');
   }
   return `https://www.facebook.com${url.pathname}${url.search}`;
