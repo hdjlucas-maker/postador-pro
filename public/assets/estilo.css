@@ -734,11 +734,11 @@ tr:last-child td {
 .suporte-contato { border-left: 4px solid #25d366; }
 .contato-email { margin: 14px 0 0; }
 
-.aceite-download:not([hidden]) { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:16px; background:rgba(0,0,0,.58); }
-.aceite-download-cartao { width:min(100%, 460px); padding:22px; border-radius:12px; background:#fff; box-shadow:0 12px 48px rgba(0,0,0,.28); }
-.aceite-download-cartao h2 { margin-top:0; }
-.aceite-download-cartao p { color:#65676b; font-size:14px; }
+.aceite-download:not([hidden]), .aviso-plano:not([hidden]) { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:16px; background:rgba(0,0,0,.58); }
+.aceite-download-cartao, .aviso-plano-cartao { width:min(100%, 460px); padding:22px; border-radius:12px; background:#fff; box-shadow:0 12px 48px rgba(0,0,0,.28); }
+.aceite-download-cartao h2, .aviso-plano-cartao h2 { margin-top:0; }
+.aceite-download-cartao p, .aviso-plano-cartao p { color:#65676b; font-size:14px; }
 .aceite-download-check { display:flex; align-items:flex-start; gap:8px; font-size:13px; }
 .aceite-download-check input { margin-top:4px; }
-.aceite-download-acoes { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
-.aceite-download button:disabled { opacity:.55; cursor:not-allowed; }
+.aceite-download-acoes, .aviso-plano-acoes { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+.aceite-download button:disabled, .aviso-plano button:disabled { opacity:.55; cursor:not-allowed; }

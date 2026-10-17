@@ -36,7 +36,7 @@ async function carregarPlanos() {
               <li>Histórico completo no seu navegador</li>
               <li>Atualizações incluídas</li>
             </ul>
-            <a class="botao largo${anual ? '' : ' secundario'}" href="#como-instalar">Escolher ${plano.nome.replace('Postador Pro ', '')}</a>
+            <button class="botao largo${anual ? '' : ' secundario'}" type="button" data-plano-nome="${plano.nome}" data-plano-preco="${moeda(plano.preco)} / ${anual ? 'ano' : 'mês'}">Escolher ${plano.nome.replace('Postador Pro ', '')}</button>
           </div>`;
       })
       .join('');
@@ -87,5 +87,41 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   limitar(document.getElementById('email'), 254);
+
+  // Clicou em "Escolher" num plano: a contratação é dentro da extensão, então
+  // o aviso explica o caminho e ja oferece o download. Antes o botao so rolava
+  // a pagina ate "Como instalar", parecendo que o clique nao fazia nada.
+  const avisoPlano = document.getElementById('aviso-plano');
+  const tituloAvisoPlano = document.getElementById('aviso-plano-titulo');
+  const detalheAvisoPlano = document.getElementById('aviso-plano-detalhe');
+  const botaoAvisoBaixar = document.getElementById('aviso-plano-baixar');
+  const botaoAvisoFechar = document.getElementById('aviso-plano-fechar');
+
+  document.getElementById('lista-planos').addEventListener('click', evento => {
+    const botao = evento.target.closest('button[data-plano-nome]');
+    if (!botao) return;
+    const curto = botao.dataset.planoNome.replace('Postador Pro ', '');
+    tituloAvisoPlano.textContent = `Assinar o plano ${curto}`;
+    detalheAvisoPlano.textContent = `${botao.dataset.planoNome}: ${botao.dataset.planoPreco}.`;
+    avisoPlano.hidden = false;
+    botaoAvisoBaixar.focus();
+  });
+
+  botaoAvisoFechar.addEventListener('click', () => {
+    avisoPlano.hidden = true;
+  });
+
+  avisoPlano.addEventListener('keydown', evento => {
+    if (evento.key === 'Escape') botaoAvisoFechar.click();
+  });
+
+  botaoAvisoBaixar.addEventListener('click', () => {
+    avisoPlano.hidden = true;
+    // Reaproveita o fluxo de download que ja existe (aceite dos termos uma vez
+    // e baixa o zip): o aviso so explica, o download e o mesmo da pagina.
+    const linkDownload = document.querySelector('a[href^="/downloads/postador-pro.zip"]');
+    if (linkDownload) linkDownload.click();
+  });
+
   carregarPlanos().catch(() => {});
 });
