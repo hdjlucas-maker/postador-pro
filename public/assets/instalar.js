@@ -12,7 +12,10 @@ async function carregarPlanos() {
     const limiteTrial = document.getElementById('limite-trial');
     if (limiteTrial) limiteTrial.textContent = `${trial.gruposPorDia} grupos por dia`;
 
-    document.getElementById('dias-avaliacao').textContent = avaliacaoDias;
+    // O elemento é opcional: sem a proteção, uma página sem ele derrubava o
+    // carregamento dos planos inteiro (o erro caía no catch abaixo).
+    const elementoDias = document.getElementById('dias-avaliacao');
+    if (elementoDias) elementoDias.textContent = avaliacaoDias;
 
     if (!planos || !planos.length) {
       alvo.innerHTML = '<div class="cartao"><p>Nenhum plano disponível no momento.</p></div>';

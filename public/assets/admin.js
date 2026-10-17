@@ -185,7 +185,9 @@ formLogin.addEventListener('submit', async evento => {
       senha: document.getElementById('senha').value
     });
 
-    usuario = dados.usuario || null;
+    // O /api/login devolve o perfil direto (id, nome, email, admin...), sem
+    // envelope `usuario`; antes o topo do painel ficava sem o e-mail.
+    usuario = dados && dados.email ? dados : null;
     sessaoMostrada(usuario);
     await recarregar();
   } catch (erro) {

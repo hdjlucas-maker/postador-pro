@@ -4,7 +4,7 @@
   "private": true,
   "description": "Extensão de navegador para divulgação em grupos do Facebook, com API de assinatura em Cloudflare Workers e cobrança pela InfinitePay",
   "scripts": {
-    "test": "node tests/campanhas-validation.test.mjs && node tests/facebook-content.test.mjs && node tests/service-worker-grupos.test.mjs",
+    "test": "node tests/campanhas-validation.test.mjs && node tests/facebook-content.test.mjs && node tests/paginas-publicas.test.mjs && node tests/service-worker-grupos.test.mjs",
     "test:worker": "npm --prefix worker test",
     "verificar:extensao": "node scripts/empacotar-extensao.js --verificar",
     "empacotar": "node scripts/empacotar-extensao.js",

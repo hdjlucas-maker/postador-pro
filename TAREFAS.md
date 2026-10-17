@@ -12,8 +12,10 @@ Atualizada em 17/10/2026.
 - [x] Imagem na extensão: as duas formas combinadas com reserva — primeiro "drop", depois o input de arquivo, depois defineProperty, conferindo a prévia entre as tentativas (já está no zip v1.0.49).
 - [x] Publicação em vários grupos: corrigida a falha aleatória "Não consegui ativar a publicação nesta página" que derrubava grupos da campanha (a injeção do script acontecia durante o redirecionamento do Facebook). Agora espera a página final do grupo ficar estável, tenta a injeção de novo e avisa em caso de login/verificação; regressão travada por teste novo (zip v1.0.50).
 - [x] "Usar novamente" revisado e aprovado pelo usuário em campanha real (17/10/2026); comportamento atual permanece, sem mudanças.
+- [x] Painel admin: login no navegador corrigido. O `comum.js` criava funções globais (`function chamar`...) e o `admin.js`/`instalar.js` morriam com "Identifier 'chamar' has already been declared" — o clique em Entrar recarregava a página e limpava os campos, sem erro visível (a landing também ficava sem os planos). O `comum.js` agora é encapsulado, o `instalar.js` tolera elemento ausente, o e-mail volta ao topo do painel e o `#dias-avaliacao` voltou à landing; coberto pelo teste novo `tests/paginas-publicas.test.mjs`.
 
 ## Pendente
+- [ ] Confirmar o login do painel admin no seu navegador (recarregue com Ctrl+F5 por causa do cache).
 - [ ] Testar a janela "Avaliar ferramenta" da extensão (nota 4-5 publica direto; 1-3 espera aprovação no painel).
 - [ ] Substituir as avaliações de exemplo por avaliações reais (ou apagar pelo painel).
 - [ ] Testar o pagamento real na InfinitePay ponta a ponta (checkout -> webhook -> liberação). É o último teste combinado.
