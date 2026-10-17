@@ -128,6 +128,17 @@ Os prints saem de dados de exemplo (extensão real carregada num Chrome de teste
 chamadas de licença bloqueadas — nada é criado ou alterado no servidor). O gerador fica em
 `dist/ferramentas/prints-loja.mjs` (roda com `puppeteer-core`; regenerar quando a interface mudar).
 
+## Recursos globais (subseção da ficha)
+
+- Vídeo promocional global: opcional — deixar vazio.
+- Prints: arrastar de `public/loja/` (todos 1280x800, PNG 24 bits sem alfa — conferido byte a byte): `campanhas.png`, `campanha.png`, `assinar.png`, `painel.png`, `popup.png`. Não subir `avaliar.png` enquanto a avaliação de teste estiver pública (ver aviso acima).
+- Bloco promocional pequeno (440x280): `public/loja/promo-440x280.png`.
+- Bloco promocional de letreiro (1400x560): `public/loja/promo-1400x560.png`.
+- URL oficial: deixar "Nenhum" (exigiria verificar o domínio no Google Search Console).
+- URL da página inicial: `https://postador.hdjlucas.workers.dev/` (já preenchida).
+- URL do suporte: `https://postador.hdjlucas.workers.dev/#suporte` (a seção existe na landing).
+- Conteúdo adulto: Não.
+
 ## Depois de publicado
 
 - [ ] Copiar o Item ID (aba Package) e ajustar `EXTENSAO_IDS` no worker + deploy.
