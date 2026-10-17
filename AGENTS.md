@@ -6,10 +6,10 @@ Extensão de navegador (Chrome, Manifest V3) que publica campanhas em grupos do 
 
 | Comando | O que faz |
 |---|---|
-| `npm test` | 11 testes da extensão (validação de campos, Spintax, seleção do compositor no DOM simulado e transporte da imagem em base64). |
+| `npm test` | 31 testes da extensão (validação de campos, Spintax, seleção do compositor no DOM simulado, transporte da imagem em base64 e segurança da licença/relógio). |
 | `npm run verificar:extensao` | Confere manifesto, permissões, `key`, arquivos citados, sintaxe de todos os `.js`, referências dos HTML e elementos do DOM usados no JS. Não gera nada. |
 | `npm run empacotar` | Verifica e gera `public/downloads/postador-pro.zip`. |
-| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (27 testes da API, vitest + pool do Workers). |
+| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (28 testes da API, vitest + pool do Workers). |
 
 ## Ordem quando mexer na extensão
 
@@ -97,6 +97,9 @@ Contas de administrador (`ADMIN_EMAILS`: hoje `hdjlucas@gmail.com` e `aservicos1
 - Liberação é pelo **webhook da InfinitePay** (`POST /webhooks/infinitepay`), que confirma o pagamento com a InfinitePay e compara o valor, não confia no corpo da requisição. Só então o servidor muda o usuário para `pro` com `dataExpiracao`.
 - Se o webhook se perder, a extensão pode chamar `POST /api/extensao/reconciliar` para consultar o servidor e atualizar a licença.
 - Bloqueio por vencimento é decidido pelo servidor. A extensão consulta o servidor antes de cada grupo (`licenca.js` falha fechada sem conexão; a carência offline serve só para exibir estado no popup, nunca para iniciar publicação). Alterar a licença localmente no navegador **não** libera uso após vencimento.
+- Contadores de publicação (`/publicacao/hoje` e `/publicacao`) exigem acesso válido (`exigirTokenComAcesso`): vencido recebe 402 `acesso_expirado` e nem conta publicação; conta bloqueada recebe 401. O contador só avança até o teto do plano e a rota responde 429 quando estoura — o UPSERT de `publicacoes_incrementarHoje` devolve linha apenas quando o contador avança de verdade.
+- Relógio do computador atrasado não estica nada: `lib/licenca.js` (`relogioVoltou`) detecta `ultimaVerificacao` no futuro e anula cache local e carência offline; publicar sempre exige resposta do servidor. Teste: `tests/licenca-seguranca.test.mjs`.
+- Resposta de vencido bloqueia mesmo com estado local "permitido": a extensão grava a decisão do servidor (`acesso.permitido: false`) e nunca libera por conta própria.
 - Preços estão em `wrangler.jsonc` (`PLAN_MONTHLY_PRICE: 2500`, `PLAN_ANNUAL_PRICE: 24900`, em centavos = R$ 25,00 / R$ 249,00) e expostos por `GET /api/extensao/planos`.
 - Pagamento real ponta a ponta com a InfinitePay **não está verificado**; teste com cuidado antes de confiar em produção.
 

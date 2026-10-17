@@ -192,10 +192,16 @@ function exigirToken() {
 function exigirTokenComAcesso() {
   return async function middleware(c, next) {
     const user = await usuarioPorToken(c.env, security.extrairBearer(c));
-    const estado = estadoDeAcesso(c.env, user);
-
-    if (!estado.permitido) {
+    if (!user) {
       return c.json({ erro: 'Faça login na extensão para continuar.', codigo: 'nao_autenticado' }, 401);
+    }
+
+    const estado = estadoDeAcesso(c.env, user);
+    if (!estado.permitido) {
+      // Vencido é decisão de licença, não de sessão: 402 com código próprio,
+      // para a extensão diferenciar "assine de novo" de "entre de novo" (é o
+      // mesmo par que `lib/licenca.js` já lê para marcar o acesso expirado).
+      return c.json({ erro: 'Sua avaliação ou licença venceu. Assine um plano para continuar.', codigo: 'acesso_expirado' }, 402);
     }
 
     c.set('user', user);

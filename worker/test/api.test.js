@@ -266,6 +266,50 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect((await licenca.json()).acesso).toEqual({ permitido: false, status: 'expirado' });
   });
 
+  it('conta publicações no servidor e nega a contagem para vencido e bloqueado', async () => {
+    const email = novoEmail();
+    const cadastro = await post('/api/extensao/cadastro', {
+      nome: 'Teste Limite', email, senha: 'senha-super-segura'
+    }, { Origin: ORIGEM });
+    const dados = await cadastro.json();
+    const cabecalhos = { Origin: ORIGEM, Authorization: `Bearer ${dados.token}` };
+
+    // A contagem de publicações é do servidor: é ele quem decide o que ainda
+    // cabe no dia — quem editar a extensão localmente não passa do limite.
+    const hoje = await SELF.fetch(`${BASE}/api/extensao/publicacao/hoje`, { headers: cabecalhos });
+    expect(hoje.status).toBe(200);
+    expect((await hoje.json()).pode).toBe(true);
+
+    for (let i = 0; i < 5; i += 1) {
+      const registrada = await SELF.fetch(`${BASE}/api/extensao/publicacao`, { method: 'POST', headers: cabecalhos });
+      expect(registrada.status).toBe(200);
+      expect((await registrada.json()).ok).toBe(true);
+    }
+    const estourou = await SELF.fetch(`${BASE}/api/extensao/publicacao`, { method: 'POST', headers: cabecalhos });
+    expect(estourou.status).toBe(429);
+    expect((await estourou.json()).ok).toBe(false);
+
+    // Vencido: o servidor nega antes do limite — "deixar a data atrasada" no
+    // computador não muda a decisão, que usa a data do próprio servidor.
+    const usuario = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    await env.DB.prepare('UPDATE users SET trial_fim = ? WHERE id = ?')
+      .bind(new Date(Date.now() - 60000).toISOString(), usuario.id)
+      .run();
+
+    const vencidoHoje = await SELF.fetch(`${BASE}/api/extensao/publicacao/hoje`, { headers: cabecalhos });
+    expect(vencidoHoje.status).toBe(402);
+    expect((await vencidoHoje.json()).codigo).toBe('acesso_expirado');
+
+    const vencidoRegistro = await SELF.fetch(`${BASE}/api/extensao/publicacao`, { method: 'POST', headers: cabecalhos });
+    expect(vencidoRegistro.status).toBe(402);
+
+    // Bloqueado: o token deixa de valer na hora (o middleware relê a conta a
+    // cada requisição), então nem chega na contagem.
+    await env.DB.prepare('UPDATE users SET bloqueado = 1 WHERE id = ?').bind(usuario.id).run();
+    const bloqueado = await SELF.fetch(`${BASE}/api/extensao/publicacao/hoje`, { headers: cabecalhos });
+    expect(bloqueado.status).toBe(401);
+  });
+
   it('conta de administrador nunca expira: avaliação vencida continua valendo como Pro', async () => {
     // `segundo@postador.pro` vem da lista `ADMIN_EMAILS` do vitest.config.mjs,
     // que tem dois e-mails separados por vírgula, como a produção.

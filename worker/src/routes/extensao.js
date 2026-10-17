@@ -143,8 +143,9 @@ function criar() {
 
   // Limite diário server-side: a extensão consulta antes de publicar e o servidor
   // incrementa somente quando a publicação é confirmada. Isso impede que quem
-  // editar a extensão localmente passe do limite do plano.
-  app.get('/publicacao/hoje', auth.exigirToken(), async c => {
+  // editar a extensão localmente passe do limite do plano — e, com acesso
+  // exigido (402 quando vencido), o vencido não consegue nem contar publicação.
+  app.get('/publicacao/hoje', auth.exigirTokenComAcesso(), async c => {
     const env = c.env;
     const user = c.get('user');
     const hoje = new Date().toISOString().slice(0, 10);
@@ -162,7 +163,7 @@ function criar() {
   // Incrementa o contador de hoje de forma atômica. Só avança se o contador
   // atual for menor que o limite do plano, então requisições duplicadas ou
   // simultâneas nunca ultrapassam o teto.
-  app.post('/publicacao', auth.exigirToken(), security.limiteD1('publicacao', { max: 60, chave: porConta }), async c => {
+  app.post('/publicacao', auth.exigirTokenComAcesso(), security.limiteD1('publicacao', { max: 60, chave: porConta }), async c => {
     const env = c.env;
     const user = c.get('user');
     const hoje = new Date().toISOString().slice(0, 10);

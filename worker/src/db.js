@@ -649,21 +649,20 @@ async function publicacoes_contarHoje(env, userId, data) {
 async function publicacoes_incrementarHoje(env, userId, data, limite) {
   const hoje = data || new Date().toISOString().slice(0, 10);
 
+  // Uma instrução só, atômica: a linha só é devolvida quando o contador avança
+  // de verdade. No teto, o WHERE do UPSERT impede o avanço e o RETURNING não
+  // devolve nada — sem isso a rota respondia 200 no limite e nunca sinalizava
+  // o 429 (o contador ficava parado no teto, mas `ok` vinha verdadeiro).
   const row = await env.DB.prepare(
     `INSERT INTO publicacoes_dia (user_id, data, contador) VALUES (?, ?, 1)
-       ON CONFLICT(user_id, data) DO UPDATE SET
-         contador = CASE
-           WHEN publicacoes_dia.contador < ? THEN publicacoes_dia.contador + 1
-           ELSE publicacoes_dia.contador
-         END
+       ON CONFLICT(user_id, data) DO UPDATE SET contador = contador + 1
+       WHERE publicacoes_dia.contador < ?
      RETURNING contador`
   )
     .bind(userId, hoje, Number(limite))
     .first();
 
-  const contador = Number(row?.contador || 0);
-  const ok = contador <= Number(limite) && row !== null;
-  return { ok, contador, hoje };
+  return { ok: row !== null, contador: Number(row?.contador || 0), hoje };
 }
 
 /* -------------------------------------------------------------- avaliações */

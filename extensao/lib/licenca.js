@@ -44,14 +44,11 @@ function validadeLocal(estado) {
   return Number.isFinite(instante) && instante > Date.now();
 }
 
-// Carência offline: se a última verificação foi há menos de CARENCIA_OFFLINE_MS
-// e o acesso estava permitido, continua valendo mesmo sem conseguir falar com o
-// servidor agora.
-function temCarencia(estado) {
-  if (!estado.acesso || !acessoPermitido(estado.acesso)) return false;
-  if (!validadeLocal(estado)) return false;
-  if (!estado.ultimaVerificacao) return false;
-  return Date.now() - estado.ultimaVerificacao < CONFIG.CARENCIA_OFFLINE_MS;
+// O relógio do computador pode ser atrasado de propósito para "esticar" a
+// avaliação: a última verificação aparece no futuro. Sem relógio confiável, o
+// cache e a carência offline deixam de valer — só a resposta do servidor agora.
+function relogioVoltou(estado) {
+  return Boolean(estado.ultimaVerificacao) && Date.now() < Number(estado.ultimaVerificacao);
 }
 
 async function verificarLicenca(forcar = false, exigirServidor = false) {
@@ -64,8 +61,9 @@ async function verificarLicenca(forcar = false, exigirServidor = false) {
 
   const agora = Date.now();
   const passou = agora - (estado.ultimaVerificacao || 0) > CONFIG.VERIFICAR_LICENCA_MINUTOS * 60000;
+  const relogioSuspeito = relogioVoltou(estado);
 
-  if (!forcar && !passou && estado.acesso && validadeLocal(estado)) {
+  if (!forcar && !passou && !relogioSuspeito && estado.acesso && validadeLocal(estado)) {
     return { acesso: estado.acesso, permitido: acessoPermitido(estado.acesso), status: estado.acesso.status };
   }
 
@@ -94,10 +92,14 @@ async function verificarLicenca(forcar = false, exigirServidor = false) {
   }
 }
 
+// Carência offline: se a última verificação foi há menos de CARENCIA_OFFLINE_MS
+// e o acesso estava permitido, continua valendo mesmo sem conseguir falar com o
+// servidor agora. Com o relógio atrasado (verificação no futuro), não vale.
 function permaneceCarencia(estado) {
   if (!estado.acesso || !acessoPermitido(estado.acesso)) return false;
   if (!validadeLocal(estado)) return false;
   if (!estado.ultimaVerificacao) return false;
+  if (relogioVoltou(estado)) return false;
   return Date.now() - estado.ultimaVerificacao < CONFIG.CARENCIA_OFFLINE_MS;
 }
 
