@@ -99,15 +99,15 @@ Mudar `TRIAL_DAYS` exige editar `worker/wrangler.jsonc` e fazer `wrangler deploy
 ## Gotchas que um agente provavelmente perderia
 
 - Manifest V3: o Chrome encerra o service worker por inatividade; `chrome.alarms` só dispara com o navegador aberto. Agendamento depende do navegador ficar aberto (documentado na interface e nos termos).
-- A extensão armazena campanhas, publicações, imagens e destinos **no navegador do cliente**, não no servidor. O servidor guarda apenas a conta do cliente (e-mail, nome, hash da senha, plano, vencimento, histórico de pagamento) e agora também o **contador de publicações diárias** (tabela `publicacoes_dia` no D1).
+- A extensão armazena campanhas, textos, grupos e histórico **no navegador do cliente**, não no servidor. O servidor guarda apenas a conta do cliente (e-mail, nome, hash da senha, plano, vencimento, histórico de pagamento) e agora também o **contador de publicações diárias** (tabela `publicacoes_dia` no D1).
 - `info.md` tem credenciais de administrador e é **local apenas**; nunca commitar nem incluir no zip público.
 - Botão "Gerar 3 variações" desabilitado: a rota `POST /api/extensao/gerar-textos` não existe no worker (404). O botão foi desabilitado na interface com aviso claro para não gerar expectativa. Para reativar, implementar a rota no worker ou remover o aviso.
 - `DIRETRIZES.md` no GitHub é uma versão antiga; este arquivo só chega a outras IAs se for commitado de propósito.
 - Rate limit de edge (`RL_GERAL`, `RL_WEBHOOK`) está **desligado** no `wrangler.jsonc` enquanto o Wrangler recusar o campo `ratelimits`. Até lá, o rate limit roda no D1 (tabela `rate_limits` + `security.limiteD1` nas rotas, incluindo `/publicacao`).
-- Imagem com nome acentuado (ex: "negócio.png") fazia o Facebook rejeitar com "Não é possível ler arquivo". O nome agora é sanitizado (acentos removidos) antes de enviar, e o tipo MIME é validado pelos "magic bytes" do arquivo.
-- O envio de imagem para o Facebook usa a Estratégia de Drop (arrastar e soltar) na zona de texto como primeira opção, com delay obrigatório de 3 segundos após a injeção para o Facebook processar o upload internamente antes de clicar em Publicar. Estratégias de input[type=file] e defineProperty como fallback, também com delay de 3 segundos.
-- UX do botão Publicar: após anexar a imagem, exibe aviso visual "Processando imagem, aguarde..." próximo ao botão, desabilita o botão por 3 segundos e só reabilita após o processamento. Se nenhuma estratégia conseguir injetar a imagem, mostra erro claro ao usuário.
+- **A extensão NÃO envia imagens.** A interface não tem mais a opção de upload de imagem devido a restrições de segurança do navegador Chrome (Manifest V3) que bloqueia a injeção de arquivos em inputs de upload de páginas externas (Facebook). A extensão publica apenas texto.
 - Recuperação de senha por e-mail **não funciona em produção sem domínio próprio**: precisa de `npx wrangler email sending enable SEUDOMINIO`, binding `EMAIL` no `wrangler.jsonc`, `EMAIL_FROM` nas vars e `wrangler deploy`. Sem isso, o link vai só para o log e o admin redefini a senha pelo painel.
+- O botão "Agendar campanha" foi removido do rodapé do formulário. O agendamento agora é feito apenas pelo checkbox "Agendar publicação" acima do campo de data/hora.
+- "Usar novamente" funciona para campanhas concluídas ou falhadas, criando uma nova execução com os mesmos textos e destinos.
 
 ## Seletores do Facebook (revisar se a publicação quebrar)
 
