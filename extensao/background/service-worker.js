@@ -273,29 +273,12 @@ async function publicarEmDestino(campanha, destino) {
     return { ok: false, retentavel: true, erro: 'Não consegui ativar a publicação nesta página do Facebook. Nenhuma publicação foi iniciada.' };
   }
 
-  // Busca a imagem no IndexedDB.
-  let imagemDados = null;
-  let imagemTipo = null;
-  let imagemNome = null;
-  if (campanha.imagemId) {
-    const blob = await armazenamento.buscarImagem(campanha.imagemId);
-    if (!blob || !blob.size) {
-      return { ok: false, pausar: true, retentavel: true, erro: 'A imagem selecionada não está mais disponível no armazenamento da extensão. Nenhuma publicação foi enviada.' };
-    }
-    imagemTipo = String(blob.type || '').toLowerCase();
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(imagemTipo)) {
-      return { ok: false, pausar: true, retentavel: true, erro: `Formato de imagem não aceito (${imagemTipo || 'desconhecido'}). Use PNG, JPEG, WebP ou GIF. Nenhuma publicação foi enviada.` };
-    }
-    imagemDados = await blob.arrayBuffer();
-    if (!imagemDados.byteLength) {
-      return { ok: false, pausar: true, retentavel: true, erro: 'O arquivo de imagem está vazio. Nenhuma publicação foi enviada.' };
-    }
-    const validacaoImagem = validarImagemAntesEnviar(blob, imagemDados);
-    if (!validacaoImagem.ok) {
-      return { ok: false, pausar: true, retentavel: true, erro: `${validacaoImagem.erro} Nenhuma publicação foi enviada.` };
-    }
-    imagemNome = blob.name || '';
-  }
+  // Imagens desativadas na interface da extensão. Campanhas antigas que ainda
+  // tenham imagemId salvo no armazenamento são publicadas apenas com texto,
+  // sem tentar anexar nada.
+  const imagemDados = null;
+  const imagemTipo = null;
+  const imagemNome = null;
 
   const selecaoTexto = escolherTexto(campanha);
   const texto = selecaoTexto.texto;
@@ -439,29 +422,6 @@ function extrairIdGrupo(urlOuDestino) {
   } catch (_) {
     return String(urlOuDestino || '').trim();
   }
-}
-
-// Verifica os "magic bytes" (cabeçalho do arquivo) para confirmar que o tipo
-// MIME declarado confere com o conteúdo real. O Facebook rejeita arquivos cujo
-// tipo não bate com os bytes iniciais, gerando "Não é possível ler arquivo".
-function tipoMimePorCabecalho(dados) {
-  const view = new Uint8Array(dados.slice(0, 4));
-  const b0 = view[0], b1 = view[1], b2 = view[2], b3 = view[3];
-  if (b0 === 0xff && b1 === 0xd8 && b2 === 0xff) return 'image/jpeg';
-  if (b0 === 0x89 && b1 === 0x50 && b2 === 0x4e && b3 === 0x47) return 'image/png';
-  if (b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46) return 'image/webp';
-  if (b0 === 0x47 && b1 === 0x49 && b2 === 0x46 && b3 === 0x38) return 'image/gif';
-  return null;
-}
-
-function validarImagemAntesEnviar(blob, dados) {
-  if (!blob || !dados || dados.byteLength === 0) return { ok: false, erro: 'A imagem está vazia ou não pôde ser lida do armazenamento.' };
-  const mimeReal = tipoMimePorCabecalho(dados);
-  const mimeDeclarado = String(blob.type || '').toLowerCase();
-  const mimeValidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  if (!mimeValidos.includes(mimeDeclarado)) return { ok: false, erro: `Tipo de imagem não suportado (${mimeDeclarado || 'desconhecido'}). Use PNG, JPEG, WebP ou GIF.` };
-  if (mimeReal && mimeReal !== mimeDeclarado) return { ok: false, erro: `O arquivo não parece ser uma imagem ${mimeDeclarado} válida. O Facebook pode rejeitá-lo.` };
-  return { ok: true };
 }
 
 function esperar(ms) {

@@ -415,11 +415,12 @@ function atualizarPreview() {
   const min = Math.round(ritmoAtual.minMs / 60000);
   const max = Math.round(ritmoAtual.maxMs / 60000);
   $('preview-intervalo').textContent = `${min}–${max} minutos`;
-  $('preview-inicio').textContent = $('campo-agendar').checked
+  const agendando = $('campo-agendar').checked;
+  $('preview-inicio').textContent = agendando
     ? ($('campo-horario').value ? new Date($('campo-horario').value).toLocaleString('pt-BR') : 'horário não definido')
     : 'agora';
-  $('botao-postar-agora').disabled = $('campo-agendar').checked || salvandoCampanha;
-  $('botao-salvar').disabled = !$('campo-agendar').checked || salvandoCampanha;
+  $('botao-postar-agora').textContent = agendando ? '⏰ AGENDAR PUBLICAÇÃO' : '🚀 INICIAR PUBLICAÇÃO';
+  $('botao-postar-agora').disabled = salvandoCampanha;
 }
 
 async function salvarCampanha(modo = 'salvar') {
@@ -483,8 +484,7 @@ async function salvarCampanha(modo = 'salvar') {
   }
 }
 
-$('botao-postar-agora').addEventListener('click', () => salvarCampanha('agora'));
-$('botao-salvar').addEventListener('click', () => salvarCampanha('salvar'));
+$('botao-postar-agora').addEventListener('click', () => salvarCampanha($('campo-agendar').checked ? 'salvar' : 'agora'));
 $('botao-pausar').addEventListener('click', async () => { await chrome.runtime.sendMessage({ tipo: 'pausar-campanha' }); renderizarStatus(await armazenamento.carregarEstado()); });
 $('botao-retomar').addEventListener('click', async () => {
   const estado = await armazenamento.carregarEstado();

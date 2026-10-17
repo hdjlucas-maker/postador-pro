@@ -6,10 +6,10 @@ Extensão de navegador (Chrome, Manifest V3) que publica campanhas em grupos do 
 
 | Comando | O que faz |
 |---|---|
-| `npm test` | 9 testes da extensão (validação de campos, Spintax e seleção do compositor de nova postagem no DOM simulado). |
-| `npm run verificar:extensao` | Confere manifesto, permissões, `key`, arquivos citados, sintaxe de todos os `.js` e referências dos HTML. Não gera nada. |
+| `npm test` | 10 testes da extensão (validação de campos, Spintax e seleção do compositor de nova postagem no DOM simulado). |
+| `npm run verificar:extensao` | Confere manifesto, permissões, `key`, arquivos citados, sintaxe de todos os `.js`, referências dos HTML e elementos do DOM usados no JS. Não gera nada. |
 | `npm run empacotar` | Verifica e gera `public/downloads/postador-pro.zip`. |
-| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (22 testes da API, vitest + pool do Workers). |
+| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (23 testes da API, vitest + pool do Workers). |
 
 ## Ordem quando mexer na extensão
 
@@ -104,9 +104,10 @@ Mudar `TRIAL_DAYS` exige editar `worker/wrangler.jsonc` e fazer `wrangler deploy
 - Botão "Gerar 3 variações" desabilitado: a rota `POST /api/extensao/gerar-textos` não existe no worker (404). O botão foi desabilitado na interface com aviso claro para não gerar expectativa. Para reativar, implementar a rota no worker ou remover o aviso.
 - `DIRETRIZES.md` no GitHub é uma versão antiga; este arquivo só chega a outras IAs se for commitado de propósito.
 - Rate limit de edge (`RL_GERAL`, `RL_WEBHOOK`) está **desligado** no `wrangler.jsonc` enquanto o Wrangler recusar o campo `ratelimits`. Até lá, o rate limit roda no D1 (tabela `rate_limits` + `security.limiteD1` nas rotas, incluindo `/publicacao`).
-- **A extensão NÃO envia imagens.** A interface não tem mais a opção de upload de imagem devido a restrições de segurança do navegador Chrome (Manifest V3) que bloqueia a injeção de arquivos em inputs de upload de páginas externas (Facebook). A extensão publica apenas texto.
+- **A extensão NÃO envia imagens.** A interface não tem mais a opção de upload de imagem devido a restrições de segurança do navegador Chrome (Manifest V3) que bloqueia a injeção de arquivos em inputs de upload de páginas externas (Facebook). A extensão publica apenas texto. O service-worker não busca mais imagens do armazenamento: campanhas antigas que ainda tenham `imagemId` salvo são publicadas apenas com texto.
 - Recuperação de senha por e-mail **não funciona em produção sem domínio próprio**: precisa de `npx wrangler email sending enable SEUDOMINIO`, binding `EMAIL` no `wrangler.jsonc`, `EMAIL_FROM` nas vars e `wrangler deploy`. Sem isso, o link vai só para o log e o admin redefini a senha pelo painel.
-- O botão "Agendar campanha" foi removido do rodapé do formulário. O agendamento agora é feito apenas pelo checkbox "Agendar publicação" acima do campo de data/hora.
+- O botão "Agendar campanha" foi removido do rodapé do formulário. O agendamento se faz pelo checkbox "Agendar publicação": marcado, o botão principal vira "AGENDAR PUBLICAÇÃO" e salva para o horário escolhido; desmarcado, continua "INICIAR PUBLICAÇÃO" e publica na hora.
+- Um `$('id')` no `options.js`/`popup.js` apontando para elemento inexistente no HTML correspondente quebra a interface inteira (a tela fica só em "Verificando…"). O `npm run verificar:extensao` agora detecta isso e barra o empacotamento.
 - "Usar novamente" funciona para campanhas concluídas ou falhadas, criando uma nova execução com os mesmos textos e destinos.
 
 ## Seletores do Facebook (revisar se a publicação quebrar)

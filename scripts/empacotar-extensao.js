@@ -102,6 +102,26 @@ function verificarHtml(arquivos) {
   }
 }
 
+// --- elementos do DOM usados pelo JS e presentes no HTML ---
+// Um $('id') apontando para elemento inexistente quebra a interface inteira
+// em tempo de execução; a checagem pega isso antes de empacotar.
+
+function verificarElementos(arquivos) {
+  const paginas = [
+    ['options/options.js', 'options/options.html'],
+    ['popup/popup.js', 'popup/popup.html']
+  ];
+  for (const [js, html] of paginas) {
+    if (!arquivos.includes(js) || !arquivos.includes(html)) continue;
+    const codigo = fs.readFileSync(path.join(PASTA_EXTENSAO, js), 'utf8');
+    const marcacao = fs.readFileSync(path.join(PASTA_EXTENSAO, html), 'utf8');
+    const idsNoHtml = new Set([...marcacao.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+    for (const [, id] of codigo.matchAll(/\$\('([^']+)'\)/g)) {
+      if (!idsNoHtml.has(id)) falha(`${js} usa o elemento #${id}, que não existe em ${html}.`);
+    }
+  }
+}
+
 // --- zip ---
 
 const TABELA_CRC = (() => {
@@ -183,6 +203,7 @@ const arquivos = listarArquivos(PASTA_EXTENSAO);
 const manifesto = verificarManifesto(arquivos);
 verificarSintaxe(arquivos);
 verificarHtml(arquivos);
+verificarElementos(arquivos);
 
 if (erros.length) {
   console.error('Verificação da extensão falhou:');
