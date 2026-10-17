@@ -23,9 +23,9 @@ Atualizada em 17/10/2026.
 - [ ] Baixar o zip v1.0.53, extrair por cima e recarregar a extensão para ver a janela "Assinar / Renovar" (botão no popup e no topo do painel).
 - [ ] Conferir manualmente os grupos 205302899617039 e 1992963207656905 (falharam por possível restrição de publicação): tentar publicar pelo próprio Facebook. Se confirmado, remover das próximas campanhas.
 - [ ] Testar a janela "Avaliar ferramenta" da extensão (nota 4-5 publica direto; 1-3 espera aprovação no painel).
-- [ ] Substituir as avaliações de exemplo por avaliações reais (ou apagar pelo painel).
+- [ ] Substituir as avaliações de exemplo por avaliações reais (ou apagar pelo painel). Inclui a avaliação de teste da conta `aservicos17` ("deixe seu comentario para poder resolver as falhas da ferramenta"), que hoje aparece publicamente na janela "Avaliar ferramenta".
 - [ ] Testar o pagamento real na InfinitePay ponta a ponta (checkout -> webhook -> liberação). É o último teste combinado.
 - [ ] Decidir o destino do botão "Gerar 3 variações" (a rota `/api/extensao/gerar-textos` não existe no worker; botão desabilitado com aviso).
 - [ ] Recuperação de senha por e-mail: precisa de domínio próprio + binding `EMAIL` no worker (hoje o caminho é o painel/WhatsApp).
-- [ ] Publicar na Chrome Web Store (taxa única de US$ 5) — decisão do usuário.
+- [ ] Publicar na Chrome Web Store (fase 2): taxa paga e declaração "Negociante — com meus dados" escolhida (17/10/2026). Prontos: pacote de upload (`npm run empacotar:loja` gera `dist/postador-pro-loja.zip`, manifest na raiz e sem a `key`), textos/justificativas/checklist em `LOJA.md` e prints 1280x800 em `public/loja/`. Falta: concluir a verificação de negociante (SMS), criar o item com o zip, preencher a ficha e, depois do primeiro envio, conferir o ID da loja e ajustar a `EXTENSAO_IDS` do worker se ele mudar.
 - [ ] Acompanhar o grupo "Point de Divulgação 2": uma falha "Publicação não confirmada" (pode ser regra do próprio grupo).

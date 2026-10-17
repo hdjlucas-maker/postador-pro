@@ -8,6 +8,7 @@
     "test:worker": "npm --prefix worker test",
     "verificar:extensao": "node scripts/empacotar-extensao.js --verificar",
     "empacotar": "node scripts/empacotar-extensao.js",
+    "empacotar:loja": "node scripts/empacotar-loja.js",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev"
   },

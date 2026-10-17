@@ -142,7 +142,8 @@ function crc32(buffer) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function gerarZip(arquivos) {
+function montarZip(entradas) {
+  // entradas: [{ nome, dados }] — o nome é o caminho dentro do zip.
   // Data fixa: 2026-01-01 00:00:00 no formato DOS.
   const dataDos = ((2026 - 1980) << 9) | (1 << 5) | 1;
   const horaDos = 0;
@@ -150,9 +151,8 @@ function gerarZip(arquivos) {
   const central = [];
   let deslocamento = 0;
 
-  for (const arquivo of arquivos) {
-    const nome = Buffer.from(`${PASTA_NO_ZIP}/${arquivo}`, 'utf8');
-    const dados = fs.readFileSync(path.join(PASTA_EXTENSAO, arquivo));
+  for (const { nome: caminho, dados } of entradas) {
+    const nome = Buffer.from(caminho, 'utf8');
     const comprimido = zlib.deflateRawSync(dados, { level: 9 });
     const crc = crc32(dados);
 
@@ -191,33 +191,46 @@ function gerarZip(arquivos) {
   const tamanhoCentral = central.reduce((soma, b) => soma + b.length, 0);
   const fim = Buffer.alloc(22);
   fim.writeUInt32LE(0x06054b50, 0);
-  fim.writeUInt16LE(arquivos.length, 8);
-  fim.writeUInt16LE(arquivos.length, 10);
+  fim.writeUInt16LE(entradas.length, 8);
+  fim.writeUInt16LE(entradas.length, 10);
   fim.writeUInt32LE(tamanhoCentral, 12);
   fim.writeUInt32LE(deslocamento, 16);
 
   return Buffer.concat([...partes, ...central, fim]);
 }
 
+// Monta as entradas do zip do site (tudo dentro de postador-pro/).
+function gerarZip(arquivos) {
+  return montarZip(arquivos.map(arquivo => ({
+    nome: `${PASTA_NO_ZIP}/${arquivo}`,
+    dados: fs.readFileSync(path.join(PASTA_EXTENSAO, arquivo))
+  })));
+}
+
 // --- execução ---
 
-const arquivos = listarArquivos(PASTA_EXTENSAO);
-const manifesto = verificarManifesto(arquivos);
-verificarSintaxe(arquivos);
-verificarHtml(arquivos);
-verificarElementos(arquivos);
+if (require.main === module) {
+  const arquivos = listarArquivos(PASTA_EXTENSAO);
+  const manifesto = verificarManifesto(arquivos);
+  verificarSintaxe(arquivos);
+  verificarHtml(arquivos);
+  verificarElementos(arquivos);
 
-if (erros.length) {
-  console.error('Verificação da extensão falhou:');
-  for (const erro of erros) console.error(`  - ${erro}`);
-  process.exit(1);
+  if (erros.length) {
+    console.error('Verificação da extensão falhou:');
+    for (const erro of erros) console.error(`  - ${erro}`);
+    process.exit(1);
+  }
+
+  console.log(`Extensão ${manifesto.version}: ${arquivos.length} arquivos, manifesto, sintaxe e referências conferidos.`);
+
+  if (!SOMENTE_VERIFICAR) {
+    fs.mkdirSync(path.dirname(SAIDA), { recursive: true });
+    const zip = gerarZip(arquivos);
+    fs.writeFileSync(SAIDA, zip);
+    console.log(`Gerado: ${path.relative(RAIZ, SAIDA)} (${Math.round(zip.length / 1024)} KB)`);
+  }
 }
 
-console.log(`Extensão ${manifesto.version}: ${arquivos.length} arquivos, manifesto, sintaxe e referências conferidos.`);
-
-if (!SOMENTE_VERIFICAR) {
-  fs.mkdirSync(path.dirname(SAIDA), { recursive: true });
-  const zip = gerarZip(arquivos);
-  fs.writeFileSync(SAIDA, zip);
-  console.log(`Gerado: ${path.relative(RAIZ, SAIDA)} (${Math.round(zip.length / 1024)} KB)`);
-}
+// Reaproveitado por scripts/empacotar-loja.js (pacote da Chrome Web Store).
+module.exports = { listarArquivos, montarZip, PASTA_EXTENSAO };

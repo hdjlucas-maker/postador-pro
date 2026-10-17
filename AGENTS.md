@@ -9,6 +9,7 @@ Extensão de navegador (Chrome, Manifest V3) que publica campanhas em grupos do 
 | `npm test` | 31 testes da extensão (validação de campos, Spintax, seleção do compositor no DOM simulado, transporte da imagem em base64 e segurança da licença/relógio). |
 | `npm run verificar:extensao` | Confere manifesto, permissões, `key`, arquivos citados, sintaxe de todos os `.js`, referências dos HTML e elementos do DOM usados no JS. Não gera nada. |
 | `npm run empacotar` | Verifica e gera `public/downloads/postador-pro.zip`. |
+| `npm run empacotar:loja` | Gera `dist/postador-pro-loja.zip` (pacote da Chrome Web Store: manifest na raiz, sem a `key`; `dist/` fora do versionamento). Guia: `LOJA.md`. |
 | `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (28 testes da API, vitest + pool do Workers). |
 
 ## Ordem quando mexer na extensão
@@ -17,6 +18,8 @@ Extensão de navegador (Chrome, Manifest V3) que publica campanhas em grupos do 
 2. Suba o `version` de `extensao/manifest.json` (formato `1.2.3`).
 3. Rode `npm run empacotar`.
 4. Comite `public/downloads/postador-pro.zip` junto com a mudança.
+
+Para subir também na Chrome Web Store, o pacote é outro: `npm run empacotar:loja` gera `dist/postador-pro-loja.zip`. Passo a passo da ficha (textos, justificativas e prints) em `LOJA.md`.
 
 Sem isso, o cliente baixa uma versão antiga do zip (já aconteceu). Não versionar `.env`, `data/`, `*.db`, `.wrangler/`, `node_modules/` nem `info.md` (contém credenciais de administrador; já está no `.gitignore`).
 
@@ -40,7 +43,8 @@ Sem isso, o cliente baixa uma versão antiga do zip (já aconteceu). Não versio
 - `worker/src/routes/` — `auth.js`, `extensao.js`, `billing.js`, `admin.js`.
 - `worker/src/` — `auth.js`, `billing.js`, `security.js`, `db.js`, `crypto.js`, `email.js`, `config.js`, `log.js`.
 - `worker/schema.sql` + `worker/migrations/0001_inicial.sql` — esquema D1. Migrações novas: adicionar arquivo, nunca editar o existente.
-- `public/` — landing, `admin.html`, `redefinir.html`, `termos.html`, `privacidade.html` e `downloads/postador-pro.zip`. Servidos pelo binding de assets do Worker; só `/api/*` e o webhook chegam ao Worker.
+- `public/` — landing, `admin.html`, `redefinir.html`, `termos.html`, `privacidade.html`, `loja/` (prints 1280x800 da ficha) e `downloads/postador-pro.zip`. Servidos pelo binding de assets do Worker; só `/api/*` e o webhook chegam ao Worker.
+- `LOJA.md` — guia da publicação na Chrome Web Store (textos da ficha, justificativas de permissão, prints e checklist pós-envio).
 
 ## Extensão ↔ API
 
