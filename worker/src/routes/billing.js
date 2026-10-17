@@ -28,7 +28,7 @@ function criar() {
     const env = c.env;
     const cfg = configMod.config(env);
     const user = c.get('user');
-    const estado = auth.estadoDeAcesso(user);
+    const estado = auth.estadoDeAcesso(env, user);
     const plano = cfg.PLANS[user.tipoPlano];
 
     let nome = 'Acesso encerrado';
@@ -42,7 +42,9 @@ function criar() {
 
     if (estado.status === 'pro') {
       nome = plano ? plano.name : 'Postador Pro';
-      descricao = `Acesso ativo até ${new Date(user.dataExpiracao).toLocaleDateString('pt-BR')}.`;
+      descricao = auth.eAdmin(user, env)
+        ? 'Acesso permanente de administrador.'
+        : `Acesso ativo até ${new Date(user.dataExpiracao).toLocaleDateString('pt-BR')}.`;
     }
 
     const ultimoPago = await db.payments_ultimoPago(env, user._id);
@@ -80,7 +82,7 @@ function criar() {
 
     return c.json({
       ...resultado,
-      statusPagamento: auth.estadoDeAcesso(user).status,
+      statusPagamento: auth.estadoDeAcesso(env, user).status,
       dataExpiracao: user.dataExpiracao || null
     });
   });

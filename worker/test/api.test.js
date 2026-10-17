@@ -262,6 +262,35 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect((await licenca.json()).acesso).toEqual({ permitido: false, status: 'expirado' });
   });
 
+  it('conta de administrador nunca expira: avaliação vencida continua valendo como Pro', async () => {
+    // `segundo@postador.pro` vem da lista `ADMIN_EMAILS` do vitest.config.mjs,
+    // que tem dois e-mails separados por vírgula, como a produção.
+    const email = 'segundo@postador.pro';
+    const cadastro = await post('/api/register', { nome: 'Segundo Admin', email, senha: 'senha-super-segura' });
+    const rotas = parDe(cadastro.headers);
+
+    // Sem forçar o fim da avaliação, o teste não provaria a permanência.
+    await env.DB.prepare('UPDATE users SET trial_fim = ? WHERE email = ?')
+      .bind(new Date(Date.now() - 60000).toISOString(), email)
+      .run();
+
+    const perfil = await SELF.fetch(`${BASE}/api/me`, {
+      headers: { Cookie: `postador_session=${rotas.get('postador_session')}` }
+    });
+    const dados = await perfil.json();
+    expect(dados.admin).toBe(true);
+    expect(dados.statusPagamento).toBe('pro');
+    expect(dados.limites.gruposPorDia).toBe(10);
+
+    const login = await post('/api/extensao/login', { email, senha: 'senha-super-segura' }, { Origin: ORIGEM });
+    const extensao = await login.json();
+    expect(login.status).toBe(200);
+    expect(extensao.acesso).toEqual({ permitido: true, status: 'pro' });
+    expect(extensao.licenca.plano).toBe('pro');
+    expect(extensao.licenca.avaliacaoAte).toBeNull();
+    expect(extensao.licenca.limites.gruposPorDia).toBe(10);
+  });
+
   it('lista as avaliações aprovadas para a janela Avaliar ferramenta', async () => {
     const resposta = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', {
       headers: { Origin: ORIGEM }

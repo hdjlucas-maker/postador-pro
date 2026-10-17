@@ -7,8 +7,8 @@ async function carregarPlanos() {
 
   try {
     const { planos, avaliacaoDias, limites } = await chamar('/api/extensao/planos', undefined, 'GET');
-    const pro = limites && limites.pro ? limites.pro : { gruposPorDia: 300, campanhasAtivas: 50, destinosPorCampanha: 100 };
-    const trial = limites && limites.trial ? limites.trial : { gruposPorDia: 10, campanhasAtivas: 3, destinosPorCampanha: 5 };
+    const pro = limites && limites.pro ? limites.pro : { gruposPorDia: 10, campanhasAtivas: 50, destinosPorCampanha: 100 };
+    const trial = limites && limites.trial ? limites.trial : { gruposPorDia: 5, campanhasAtivas: 3, destinosPorCampanha: 5 };
     const limiteTrial = document.getElementById('limite-trial');
     if (limiteTrial) limiteTrial.textContent = `${trial.gruposPorDia} grupos por dia`;
 

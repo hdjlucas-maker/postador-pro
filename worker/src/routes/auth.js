@@ -67,7 +67,7 @@ function criar() {
     const token = await auth.criarSessao(env, user._id);
     auth.aplicarSessao(c, token);
 
-    return c.json(perfilPublico(env, user, auth.estadoDeAcesso(user)), 201);
+    return c.json(perfilPublico(env, user, auth.estadoDeAcesso(env, user)), 201);
   });
 
   app.post('/login', security.limiteD1('login'), async c => {
@@ -78,7 +78,7 @@ function criar() {
     auth.aplicarSessao(c, token);
 
     log.info('login', { userId: user._id, ip: security.clientIp(c) });
-    return c.json(perfilPublico(env, user, auth.estadoDeAcesso(user)));
+    return c.json(perfilPublico(env, user, auth.estadoDeAcesso(env, user)));
   });
 
   app.post('/logout', async c => {
@@ -91,9 +91,10 @@ function criar() {
   });
 
   app.get('/me', async c => {
+    const env = c.env;
     const user = await auth.usuarioAtual(c);
     if (!user) return c.json({ erro: 'Não autenticado.', codigo: 'nao_autenticado' }, 401);
-    return c.json(perfilPublico(c.env, user, auth.estadoDeAcesso(user)));
+    return c.json(perfilPublico(env, user, auth.estadoDeAcesso(env, user)));
   });
 
   app.patch('/me', auth.exigirLogin(), async c => {
@@ -102,7 +103,7 @@ function criar() {
     const nome = texto(body.nome, 'seu nome', { min: 2, max: 80 });
     await db.users_atualizar(env, c.get('user')._id, { nome });
     const user = await db.users_porId(env, c.get('user')._id);
-    return c.json(perfilPublico(env, user, auth.estadoDeAcesso(user)));
+    return c.json(perfilPublico(env, user, auth.estadoDeAcesso(env, user)));
   });
 
   app.post('/me/senha', auth.exigirLogin(), security.limiteD1('trocaSenha'), async c => {

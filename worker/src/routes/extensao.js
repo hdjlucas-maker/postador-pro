@@ -23,6 +23,7 @@ const NOTA_PUBLICA_DIRETA = 4;
 
 
 function resumoLicenca(env, user) {
+  const adm = auth.eAdmin(user, env);
   const limites = auth.limitesDoPlano(env, user);
   const expiracao = user.dataExpiracao ? new Date(user.dataExpiracao) : null;
   const fimAvaliacao = user.trialFim ? new Date(user.trialFim) : null;
@@ -31,11 +32,13 @@ function resumoLicenca(env, user) {
   return {
     email: user.email,
     nome: user.nome,
-    plano: user.plano,
+    // Administrador não expira: para a extensão ele aparece como Pro
+    // permanente, sem data de fim e com os limites do Pro.
+    plano: adm ? 'pro' : user.plano,
     tipoPlano: user.tipoPlano || null,
     statusPagamento: user.statusPagamento,
     expiraEm: valida(expiracao) ? expiracao.toISOString() : null,
-    avaliacaoAte: valida(fimAvaliacao) ? fimAvaliacao.toISOString() : null,
+    avaliacaoAte: !adm && valida(fimAvaliacao) ? fimAvaliacao.toISOString() : null,
     limites: {
       gruposPorDia: limites.gruposPorDia,
       campanhasAtivas: limites.campanhasAtivas,
@@ -72,7 +75,7 @@ function criar() {
     const user = await auth.autenticar(env, { email: body.email, senha: body.senha });
 
     const token = await auth.criarTokenExtensao(env, user._id);
-    const estado = auth.estadoDeAcesso(user);
+    const estado = auth.estadoDeAcesso(env, user);
 
     log.info('extensao_login', { userId: user._id, status: estado.status });
 
@@ -90,7 +93,7 @@ function criar() {
     const user = await auth.registrar(env, body);
 
     const token = await auth.criarTokenExtensao(env, user._id);
-    const estado = auth.estadoDeAcesso(user);
+    const estado = auth.estadoDeAcesso(env, user);
 
     return c.json(
       {
@@ -133,7 +136,7 @@ function criar() {
 
     return c.json({
       ...resultado,
-      acesso: auth.estadoDeAcesso(user),
+      acesso: auth.estadoDeAcesso(env, user),
       licenca: resumoLicenca(env, user)
     });
   });

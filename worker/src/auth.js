@@ -148,8 +148,12 @@ async function usuarioAtual(c) {
   return usuarioPorToken(c.env, token);
 }
 
-function estadoDeAcesso(user) {
+function estadoDeAcesso(env, user) {
   if (!user) return { permitido: false, status: 'nao_autenticado' };
+
+  // Administrador não expira: o dono precisa poder usar a própria ferramenta
+  // e abrir o painel depois do fim da avaliação, sem comprar o próprio plano.
+  if (eAdmin(user, env)) return { permitido: true, status: 'pro' };
 
   if (user.plano === 'pro' && user.dataExpiracao && new Date(user.dataExpiracao) > agora()) {
     return { permitido: true, status: 'pro' };
@@ -164,6 +168,7 @@ function estadoDeAcesso(user) {
 
 function limitesDoPlano(env, user) {
   const cfg = configMod.config(env);
+  if (eAdmin(user, env)) return cfg.PLAN_LIMITS.pro;
   return user && user.plano === 'pro' ? cfg.PLAN_LIMITS.pro : cfg.PLAN_LIMITS.trial;
 }
 
@@ -179,7 +184,7 @@ function exigirToken() {
       return c.json({ erro: 'Faça login na extensão para continuar.', codigo: 'nao_autenticado' }, 401);
     }
     c.set('user', user);
-    c.set('acesso', estadoDeAcesso(user));
+    c.set('acesso', estadoDeAcesso(c.env, user));
     return next();
   };
 }
@@ -187,7 +192,7 @@ function exigirToken() {
 function exigirTokenComAcesso() {
   return async function middleware(c, next) {
     const user = await usuarioPorToken(c.env, security.extrairBearer(c));
-    const estado = estadoDeAcesso(user);
+    const estado = estadoDeAcesso(c.env, user);
 
     if (!estado.permitido) {
       return c.json({ erro: 'Faça login na extensão para continuar.', codigo: 'nao_autenticado' }, 401);
@@ -213,7 +218,7 @@ function exigirLogin() {
 function exigirAcesso() {
   return async function middleware(c, next) {
     const user = await usuarioAtual(c);
-    const estado = estadoDeAcesso(user);
+    const estado = estadoDeAcesso(c.env, user);
 
     if (!estado.permitido) {
       return c.json({ erro: 'Seu acesso expirou. Escolha um plano para continuar.', codigo: 'acesso_expirado' }, 402);

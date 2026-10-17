@@ -78,7 +78,10 @@
     "IS_PROD": "1",
     // Preenchido por `npm run setup`. A tag da InfinitePay já é conhecida.
     "INFINITEPAY_HANDLE": "servicoslucas",
-    "ADMIN_EMAILS": "hdjlucas@gmail.com",
+    // Contas de administrador: entram no painel e nunca expiram (tratadas
+    // como Pro permanente, com os limites do Pro). Mais de um e-mail separado
+    // por vírgula.
+    "ADMIN_EMAILS": "hdjlucas@gmail.com,aservicos17@gmail.com",
     "EXTENSAO_IDS": "aaegnkekaabiomfkpmpbhodliomgkdna",
     "EMAIL_FROM": "",
     "TRIAL_DAYS": "7",

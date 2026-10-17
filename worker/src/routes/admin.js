@@ -89,7 +89,7 @@ function criar() {
     ]);
 
     return c.json({
-      usuarios: usuarios.map(user => resumo(env, user, auth.estadoDeAcesso(user).status)),
+      usuarios: usuarios.map(user => resumo(env, user, auth.estadoDeAcesso(env, user).status)),
       page,
       perPage,
       total,

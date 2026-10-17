@@ -9,7 +9,7 @@ Extensão de navegador (Chrome, Manifest V3) que publica campanhas em grupos do 
 | `npm test` | 11 testes da extensão (validação de campos, Spintax, seleção do compositor no DOM simulado e transporte da imagem em base64). |
 | `npm run verificar:extensao` | Confere manifesto, permissões, `key`, arquivos citados, sintaxe de todos os `.js`, referências dos HTML e elementos do DOM usados no JS. Não gera nada. |
 | `npm run empacotar` | Verifica e gera `public/downloads/postador-pro.zip`. |
-| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (26 testes da API, vitest + pool do Workers). |
+| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (27 testes da API, vitest + pool do Workers). |
 
 ## Ordem quando mexer na extensão
 
@@ -24,7 +24,7 @@ Sem isso, o cliente baixa uma versão antiga do zip (já aconteceu). Não versio
 
 - Um teste só: `node tests/<arquivo>.test.mjs` na raiz (usa `node:test` built-in).
 - Extensão: `npm test`.
-- Worker: `cd worker && npm install && npm test` (vitest run, atualmente 26 testes).
+- Worker: `cd worker && npm install && npm test` (vitest run, atualmente 27 testes).
 - Antes de mudar algo: `npm test` e `npm run verificar:extensao` devem passar.
 - Os testes da extensão usam DOM simulado. Publicação real em grupo do Facebook **não está verificada**; se o Facebook mudar o DOM, revisar seletores em `extensao/content/facebook.js`.
 - Pagamento real com InfinitePay e envio de e-mail também não estão verificados.
@@ -86,6 +86,8 @@ O cookie `SameSite` não atravessa `chrome-extension://`, então a extensão usa
 - Mensal R$ 25,00; anual R$ 249,00.
 
 Mudar `TRIAL_DAYS` exige editar `worker/wrangler.jsonc` e fazer `wrangler deploy` para valer em produção. Contas já cadastradas mantêm a `trialFim` gravada; a alteração afeta novos cadastros e avaliações reiniciadas pelo admin.
+
+Contas de administrador (`ADMIN_EMAILS`: hoje `hdjlucas@gmail.com` e `aservicos17@gmail.com`) nunca expiram: `estadoDeAcesso` as trata como Pro permanente, com os limites do Pro, tanto na extensão quanto no painel.
 
 ## Pagamento, checkout e bloqueio após vencimento (ponto crítico)
 

@@ -32,9 +32,10 @@ export default defineWorkersConfig(async () => {
           wrangler: { configPath: './wrangler.jsonc' },
           miniflare: {
             bindings: {
-              // Um e-mail de administrador e uma extensão fictícia com 32 letras,
-              // que é o formato que o Chrome gera.
-              ADMIN_EMAILS: 'admin@postador.pro',
+              // Dois e-mails de administrador (lista separada por vírgula, como
+              // em produção) e uma extensão fictícia com 32 letras, que é o
+              // formato que o Chrome gera.
+              ADMIN_EMAILS: 'admin@postador.pro,segundo@postador.pro',
               EXTENSAO_IDS: 'abcdefghijklmnopabcdefghijklmnop',
               EMAIL_FROM: 'nao-responda@postador.pro',
               // 1000 iterações em vez de 100000: o objetivo do teste é o
