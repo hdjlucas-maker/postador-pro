@@ -11,12 +11,12 @@ Atualizada em 17/10/2026.
 - [x] Senha do admin redefinida e login conferido em produção (valor atual no `info.md`).
 - [x] Imagem na extensão: as duas formas combinadas com reserva — primeiro "drop", depois o input de arquivo, depois defineProperty, conferindo a prévia entre as tentativas (já está no zip v1.0.49).
 - [x] Publicação em vários grupos: corrigida a falha aleatória "Não consegui ativar a publicação nesta página" que derrubava grupos da campanha (a injeção do script acontecia durante o redirecionamento do Facebook). Agora espera a página final do grupo ficar estável, tenta a injeção de novo e avisa em caso de login/verificação; regressão travada por teste novo (zip v1.0.50).
+- [x] "Usar novamente" revisado e aprovado pelo usuário em campanha real (17/10/2026); comportamento atual permanece, sem mudanças.
 
 ## Pendente
 - [ ] Testar a janela "Avaliar ferramenta" da extensão (nota 4-5 publica direto; 1-3 espera aprovação no painel).
 - [ ] Substituir as avaliações de exemplo por avaliações reais (ou apagar pelo painel).
 - [ ] Testar o pagamento real na InfinitePay ponta a ponta (checkout -> webhook -> liberação). É o último teste combinado.
-- [ ] Revisar o conceito do "Usar novamente" (reaproveitar campanha concluída/falhada) e decidir o que muda.
 - [ ] Decidir o destino do botão "Gerar 3 variações" (a rota `/api/extensao/gerar-textos` não existe no worker; botão desabilitado com aviso).
 - [ ] Recuperação de senha por e-mail: precisa de domínio próprio + binding `EMAIL` no worker (hoje o caminho é o painel/WhatsApp).
 - [ ] Publicar na Chrome Web Store (taxa única de US$ 5) — decisão do usuário.
