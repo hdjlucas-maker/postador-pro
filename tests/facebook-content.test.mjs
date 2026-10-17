@@ -121,6 +121,49 @@ test('não clica em Publicar quando o editor não aceita o texto', async () => {
   assert.equal(cliquesNoPublicar, 0);
 });
 
+test('restrição do grupo: janela "Criar post" sem campo de texto explica o motivo', async () => {
+  // Cenário real de produção: o grupo abre a janela "Criar post" mas sem
+  // contenteditable (publicação sob aprovação, somente administradores ou
+  // membro impedido). A mensagem precisa dizer que é restrição do grupo e
+  // mostrar o que a janela exibe, em vez de deixar dúvida se foi a extensão.
+  let abriuJanela = false;
+  const textoJanela = 'Criar post. A publicação neste grupo precisa ser aprovada por um administrador antes de aparecer para os membros.';
+  const janela = {
+    innerText: textoJanela,
+    textContent: textoJanela,
+    isConnected: true,
+    getAttribute: () => null,
+    getBoundingClientRect: () => ({ width: 100, height: 100 }),
+    closest: () => null,
+    querySelector(seletor) {
+      if (String(seletor).includes('heading')) return { textContent: 'Criar post' };
+      return null;
+    },
+    querySelectorAll: () => []
+  };
+  const gatilho = elemento({ texto: 'Escreva algo...', click: () => { abriuJanela = true; } });
+  const document = {
+    body: { innerText: '' },
+    querySelectorAll(seletor) {
+      if (seletor === '[role="dialog"]' || seletor.includes('[role="alert"]')) return abriuJanela ? [janela] : [];
+      if (seletor.includes('contenteditable')) return [];
+      if (seletor === '[role="button"], button, [aria-label]') return [gatilho];
+      return [];
+    }
+  };
+  let now = 0;
+  class DateAcelerada extends Date { static now() { now += 20000; return now; } }
+  const receber = iniciarContent({ document, date: DateAcelerada, setTimeoutFn: fn => { fn(); return 0; } });
+  const resultado = await receber({ tipo: 'publicar', texto: 'Mensagem de teste', grupoEsperado: 'https://www.facebook.com/groups/123456789' });
+
+  assert.equal(resultado.ok, false);
+  assert.equal(resultado.retentavel, true);
+  assert.match(resultado.erro, /sem o campo de texto/);
+  assert.match(resultado.erro, /restrição do grupo/);
+  assert.match(resultado.erro, /precisa ser aprovada por um administrador/);
+  assert.match(resultado.erro, /Nenhuma publicação foi enviada/);
+});
+
 test('imagem: base64 chega íntegro e é injetada como arquivo real no compositor', async () => {
   // Bytes de um JPEG mínimo (cabeçalho FF D8 FF). O que este teste protege:
   // o service worker envia a imagem em base64 porque o messaging do Chrome só

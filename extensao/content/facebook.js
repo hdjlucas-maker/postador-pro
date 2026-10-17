@@ -448,6 +448,25 @@ async function esperarPaginaPronta(timeoutMs = 10000) {
   }
 }
 
+// Quando a janela "Criar post" abre e não traz campo de texto, o Facebook
+// normalmente está avisando uma restrição do grupo (publicação sob aprovação,
+// somente administradores, membro impedido). Guarda um trecho do que a janela
+// mostra para a mensagem de falha explicar o motivo sem depender do console.
+function trechoDaJanelaDePublicacao() {
+  try {
+    const janelas = Array.from(document.querySelectorAll('[role="dialog"]'))
+      .filter(dialogo => dialogoNovaPublicacao(dialogo))
+      .reverse();
+    for (const janela of janelas) {
+      const texto = (janela.innerText || janela.textContent || '').replace(/\s+/g, ' ').trim();
+      if (texto) return texto.slice(0, 160);
+    }
+    return '';
+  } catch (_) {
+    return '';
+  }
+}
+
 // Resumo do que a página mostra, anexado ao erro quando o compositor não é
 // encontrado. Serve para descobrir o que mudou no Facebook sem abrir o
 // console. Guarda só rótulos curtos de botões e títulos de diálogo.
@@ -572,7 +591,14 @@ async function publicar({ texto, imagemBase64, imagemTipo, imagemNome, cadenciaM
     compositor = await esperarElemento(SELETORES.compositor, 12000);
   }
   if (!compositor) {
-    return { ok: false, retentavel: true, erro: `Compositor não encontrado neste grupo. Nenhuma publicação foi enviada; este destino será registrado como falha e a fila seguirá após o intervalo. ${diagnosticarPagina(rotuloGatilho)}` };
+    // A janela abriu sem campo de texto: o diagnóstico real dos grupos que
+    // falharam em produção. Confirma a restrição do grupo e mostra o trecho da
+    // janela para o usuário conferir pelo próprio Facebook.
+    const trecho = trechoDaJanelaDePublicacao();
+    const avisoRestricao = trecho
+      ? ` A janela "Criar post" abriu, mas veio sem o campo de texto (a extensão aguardou 12 segundos). Isso normalmente indica restrição do grupo — publicação sob aprovação, somente administradores ou perfil impedido. Confira se você consegue publicar neste grupo pelo próprio Facebook. O que a janela mostra: "${trecho}".`
+      : '';
+    return { ok: false, retentavel: true, erro: `Compositor não encontrado neste grupo.${avisoRestricao} Nenhuma publicação foi enviada; este destino será registrado como falha e a fila seguirá após o intervalo. ${diagnosticarPagina(rotuloGatilho)}` };
   }
 
   if (!dialogoNovaPublicacao(compositor.closest('[role="dialog"]'))) {
