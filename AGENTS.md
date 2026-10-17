@@ -58,7 +58,7 @@ O cookie `SameSite` não atravessa `chrome-extension://`, então a extensão usa
 - `GET /api/extensao/avaliacoes` — público (só as aprovadas, exibidas na janela "Avaliar ferramenta")
 - `POST /api/extensao/avaliacao` `{nota, comentario}` `Authorization: Bearer <token>`
 
-`EXTENSAO_IDS` (em `worker/wrangler.jsonc`) lista os IDs liberados. Somente `chrome-extension://<ID>` da lista passa na verificação de origem e recebe CORS. Não adicionar `*.workers.dev` nem `<all_urls>` a `host_permissions` do manifest — `npm run verificar:extensao` barra isso.
+`EXTENSAO_IDS` (em `worker/wrangler.jsonc`) lista os IDs liberados. Hoje são dois: `aaegnkekaabiomfkpmpbhodliomgkdna` (instalação manual, zip do site) e `bcgeojfhaipebhjfadchndghefmkmjca` (Item ID da Chrome Web Store, rascunho criado em 17/10/2026). Somente `chrome-extension://<ID>` da lista passa na verificação de origem e recebe CORS. Não adicionar `*.workers.dev` nem `<all_urls>` a `host_permissions` do manifest — `npm run verificar:extensao` barra isso.
 
 ## Worker / D1 / deploy
 

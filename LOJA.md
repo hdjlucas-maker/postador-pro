@@ -10,6 +10,7 @@ Atualizado em 17/10/2026.
   Preencher com nome legal, endereço, telefone (com SMS) e e-mail de verdade — tudo aparece
   no rodapé público da ficha. A confirmação pode levar alguns dias e a escolha pode ser
   alterada depois.
+- Item criado na loja em 17/10/2026 (rascunho): pacote 1.0.53 enviado com sucesso. **Item ID: `bcgeojfhaipebhjfadchndghefmkmjca`** — diferente do ID da instalação manual (`aaegnkekaabiomfkpmpbhodliomgkdna`); os dois já estão em `EXTENSAO_IDS` no worker, com deploy feito e conferido em produção.
 - Pacote de upload pronto: `npm run empacotar:loja` gera `dist/postador-pro-loja.zip`
   (manifest.json na raiz, sem a `key` de desenvolvimento; `dist/` não é versionado).
 - Prints 1280x800 prontos em `public/loja/` (gerados com a extensão real e dados de exemplo).
@@ -141,7 +142,7 @@ chamadas de licença bloqueadas — nada é criado ou alterado no servidor). O g
 
 ## Depois de publicado
 
-- [ ] Copiar o Item ID (aba Package) e ajustar `EXTENSAO_IDS` no worker + deploy.
+- [x] Item ID copiado (`bcgeojfhaipebhjfadchndghefmkmjca`, aba Package) e `EXTENSAO_IDS` do worker ajustada + deploy (17/10/2026; o ID manual continua na lista).
 - [ ] Decidir se a landing ganha botão "Adicionar ao Chrome" apontando para a loja.
 - [ ] Lembrar: cada versão nova na loja exige `version` maior no `manifest.json` e um novo
       `npm run empacotar:loja`; o zip antigo do site continua com a `key` de sempre.

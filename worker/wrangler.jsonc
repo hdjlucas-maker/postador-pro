@@ -82,7 +82,11 @@
     // como Pro permanente, com os limites do Pro). Mais de um e-mail separado
     // por vírgula.
     "ADMIN_EMAILS": "hdjlucas@gmail.com,aservicos17@gmail.com",
-    "EXTENSAO_IDS": "aaegnkekaabiomfkpmpbhodliomgkdna",
+    // IDs liberados da extensão. O primeiro é o da instalação manual (zip do
+    // site, tem a `key` no manifesto); o segundo é o Item ID da Chrome Web
+    // Store (não tem `key` no pacote de envio). Separe por vírgula — os dois
+    // precisam continuar aqui.
+    "EXTENSAO_IDS": "aaegnkekaabiomfkpmpbhodliomgkdna,bcgeojfhaipebhjfadchndghefmkmjca",
     "EMAIL_FROM": "",
     "TRIAL_DAYS": "7",
     "SESSION_DAYS": "30",
