@@ -276,7 +276,7 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect(typeof dados.avaliacoes[0].nota).toBe('number');
   });
 
-  it('aceita avaliação de cliente e só exibe depois da revisão', async () => {
+  it('publica nota alta na hora e segura nota baixa para a revisão', async () => {
     const email = novoEmail();
     const cadastro = await post('/api/extensao/cadastro', {
       nome: 'Iris Campos', email, senha: 'senha-super-segura'
@@ -297,32 +297,50 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     });
     expect(notaInvalida.status).toBe(400);
 
+    const comentario = 'O agendamento deixou minha rotina mais leve.';
     const envio = await SELF.fetch('https://api.postador.test/api/extensao/avaliacao', {
       method: 'POST',
       headers: { Origin: ORIGEM, 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ nota: 5, comentario: 'O agendamento deixou minha rotina mais leve.' })
+      body: JSON.stringify({ nota: 5, comentario })
     });
     expect(envio.status).toBe(200);
     expect((await envio.json()).ok).toBe(true);
 
-    // Guarda o primeiro nome da conta, por privacidade, e entra pendente.
+    // Guarda o primeiro nome da conta, por privacidade, e a nota alta já entra
+    // publicada na janela dos clientes.
     const linha = await env.DB.prepare(
       'SELECT nome, aprovada FROM avaliacoes WHERE user_id = (SELECT id FROM users WHERE email = ?)'
     ).bind(email).first();
     expect(linha.nome).toBe('Iris');
-    expect(Number(linha.aprovada)).toBe(0);
+    expect(Number(linha.aprovada)).toBe(1);
 
-    // Enquanto não é aprovada, não aparece na listagem pública.
-    const antes = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', { headers: { Origin: ORIGEM } });
-    const comentario = 'O agendamento deixou minha rotina mais leve.';
-    expect((await antes.json()).avaliacoes.some(a => a.comentario === comentario)).toBe(false);
+    const publica = await SELF.fetch(
+      'https://api.postador.test/api/extensao/avaliacoes',
+      { headers: { Origin: ORIGEM } }
+    );
+    expect((await publica.json()).avaliacoes.some(a => a.comentario === comentario)).toBe(true);
 
-    // Aprovar é o que o administrador faz pelo banco; aí entra na listagem.
-    await env.DB.prepare('UPDATE avaliacoes SET aprovada = 1 WHERE user_id = (SELECT id FROM users WHERE email = ?)')
-      .bind(email)
-      .run();
-    const depois = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', { headers: { Origin: ORIGEM } });
-    expect((await depois.json()).avaliacoes.some(a => a.comentario === comentario)).toBe(true);
+    // Reenvio com nota baixa atualiza a existente e a tira do ar até a revisão.
+    const reenvio = await SELF.fetch('https://api.postador.test/api/extensao/avaliacao', {
+      method: 'POST',
+      headers: { Origin: ORIGEM, 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nota: 2, comentario: 'Mudou minha opinião: está deixando a desejar.' })
+    });
+    expect(reenvio.status).toBe(200);
+
+    const linhaBaixa = await env.DB.prepare(
+      'SELECT nota, aprovada FROM avaliacoes WHERE user_id = (SELECT id FROM users WHERE email = ?)'
+    ).bind(email).first();
+    expect(Number(linhaBaixa.nota)).toBe(2);
+    expect(Number(linhaBaixa.aprovada)).toBe(0);
+
+    const depois = await SELF.fetch(
+      'https://api.postador.test/api/extensao/avaliacoes',
+      { headers: { Origin: ORIGEM } }
+    );
+    const lista = (await depois.json()).avaliacoes;
+    expect(lista.some(a => a.comentario === comentario)).toBe(false);
+    expect(lista.some(a => a.comentario === 'Mudou minha opinião: está deixando a desejar.')).toBe(false);
   });
 
   it('recusa extensão fora da allowlist', async () => {
@@ -449,6 +467,83 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect(painel.status).toBe(200);
     expect(dados.usuarios.total).toBeGreaterThan(0);
     expect(typeof dados.pagamentos.total).toBe('number');
+    expect(typeof dados.avaliacoes.pendentes).toBe('number');
+  });
+
+  it('aprova, edita, oculta e exclui avaliações pelo painel', async () => {
+    // Conta com avaliação pendente (nota baixa) para o administrador mexer.
+    const email = novoEmail();
+    const cadastro = await post('/api/extensao/cadastro', {
+      nome: 'Nina Torres', email, senha: 'senha-super-segura'
+    }, { Origin: ORIGEM });
+    const { token } = await cadastro.json();
+    const comentarioOriginal = 'Ainda preciso de ajustes para o meu caso.';
+    await SELF.fetch('https://api.postador.test/api/extensao/avaliacao', {
+      method: 'POST',
+      headers: { Origin: ORIGEM, 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nota: 2, comentario: comentarioOriginal })
+    });
+
+    // A conta de administrador (e-mail em ADMIN_EMAILS). O armazenamento é
+    // isolado por teste, então ela precisa nascer aqui dentro.
+    const cadastroAdmin = await post('/api/register', {
+      nome: 'Admin Postador', email: 'admin@postador.pro', senha: 'senha-super-segura'
+    });
+    expect(cadastroAdmin.status).toBe(201);
+    const admin = {
+      Cookie: cookieDe(cadastroAdmin.headers),
+      'x-csrf-token': parDe(cadastroAdmin.headers).get('postador_csrf')
+    };
+
+    // A lista traz a pendente com o e-mail de quem avaliou e marca as de exemplo.
+    const lista = await SELF.fetch(`${BASE}/api/admin/avaliacoes`, { headers: { Cookie: admin.Cookie } });
+    const dados = await lista.json();
+    expect(lista.status).toBe(200);
+
+    const pendente = dados.avaliacoes.find(a => a.comentario === comentarioOriginal);
+    expect(pendente).toBeTruthy();
+    expect(pendente.aprovada).toBe(false);
+    expect(pendente.email).toBe(email);
+    expect(pendente.exemplo).toBe(false);
+    expect(dados.avaliacoes.some(a => a.exemplo === true)).toBe(true);
+
+    // O resumo do painel conta a pendente e o aviso vai aparecer.
+    const overview = await SELF.fetch(`${BASE}/api/admin/overview`, { headers: { Cookie: admin.Cookie } });
+    expect((await overview.json()).avaliacoes.pendentes).toBeGreaterThanOrEqual(1);
+
+    // Aprovar publica na janela dos clientes na hora.
+    const aprovar = await post(`/api/admin/avaliacoes/${pendente.id}/aprovar`, { aprovada: true }, admin);
+    expect(aprovar.status).toBe(200);
+
+    const publicaUm = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', { headers: { Origin: ORIGEM } });
+    expect((await publicaUm.json()).avaliacoes.some(a => a.comentario === comentarioOriginal)).toBe(true);
+
+    // Editar o texto reflete na listagem pública.
+    const revisado = 'Ainda preciso de ajustes (texto revisado pelo suporte).';
+    const editar = await post(`/api/admin/avaliacoes/${pendente.id}/editar`, { comentario: revisado }, admin);
+    expect(editar.status).toBe(200);
+
+    const publicaDois = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', { headers: { Origin: ORIGEM } });
+    const listaPublica = (await publicaDois.json()).avaliacoes;
+    expect(listaPublica.some(a => a.comentario === revisado)).toBe(true);
+    expect(listaPublica.some(a => a.comentario === comentarioOriginal)).toBe(false);
+
+    // Ocultar tira da listagem pública.
+    const ocultar = await post(`/api/admin/avaliacoes/${pendente.id}/aprovar`, { aprovada: false }, admin);
+    expect(ocultar.status).toBe(200);
+
+    const publicaTres = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', { headers: { Origin: ORIGEM } });
+    expect((await publicaTres.json()).avaliacoes.some(a => a.comentario === revisado)).toBe(false);
+
+    // Excluir remove de vez.
+    const excluir = await SELF.fetch(`${BASE}/api/admin/avaliacoes/${pendente.id}`, {
+      method: 'DELETE',
+      headers: { Origin: BASE, ...admin }
+    });
+    expect(excluir.status).toBe(200);
+
+    const listaFinal = await SELF.fetch(`${BASE}/api/admin/avaliacoes`, { headers: { Cookie: admin.Cookie } });
+    expect((await listaFinal.json()).avaliacoes.some(a => a.id === pendente.id)).toBe(false);
   });
 
   it('exporta os dados da conta e apaga a conta', async () => {

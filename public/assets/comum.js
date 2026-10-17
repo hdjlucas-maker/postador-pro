@@ -77,4 +77,14 @@ function limitar(campo, maximo) {
   });
 }
 
-window.Postador = { lerCookie, chamar, mostrar, esconder, moeda, data, dataHora, limitar };
+// Escapa texto que veio do cliente antes de entrar em innerHTML. Sem isto, um
+// nome ou comentário com `<img onerror=...>` rodaria no contexto do painel,
+// com a sessão do administrador.
+function escapar(valor) {
+  return String(valor ?? '').replace(
+    /[&<>"']/g,
+    caractere => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[caractere]
+  );
+}
+
+window.Postador = { lerCookie, chamar, mostrar, esconder, moeda, data, dataHora, limitar, escapar };

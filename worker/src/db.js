@@ -675,6 +675,7 @@ function linhaParaAvaliacao(row) {
     nota: Number(row.nota),
     comentario: row.comentario,
     aprovada: entidade(row.aprovada),
+    usuarioEmail: row.usuario_email ?? null,
     criadoEm: row.criado_em
   };
 }
@@ -698,10 +699,13 @@ async function avaliacoes_resumo(env) {
 }
 
 /**
- * Uma avaliação por conta: reenviar atualiza a existente e a devolve para a
- * fila de revisão (`aprovada = 0`), em vez de acumular linhas repetidas.
+ * Uma avaliação por conta. A primeira segue a regra de publicação: nota alta
+ * (4 ou 5) entra publicada, nota baixa (1 a 3) espera revisão — o `aprovada`
+ * chega calculado pela rota. O reenvio atualiza a existente e sempre a coloca
+ * como não publicada (`aprovada = 0`): quem já foi publicado não republica
+ * sozinho, e o administrador decide de novo pelo painel.
  */
-async function avaliacoes_salvar(env, { userId, nome, nota, comentario }) {
+async function avaliacoes_salvar(env, { userId, nome, nota, comentario, aprovada }) {
   const existente = await env.DB.prepare(
     'SELECT id FROM avaliacoes WHERE user_id = ? LIMIT 1'
   )
@@ -720,11 +724,73 @@ async function avaliacoes_salvar(env, { userId, nome, nota, comentario }) {
 
   const novoId = id();
   await env.DB.prepare(
-    'INSERT INTO avaliacoes (id, user_id, nome, nota, comentario, aprovada, criado_em) VALUES (?, ?, ?, ?, ?, 0, ?)'
+    'INSERT INTO avaliacoes (id, user_id, nome, nota, comentario, aprovada, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?)'
   )
-    .bind(novoId, userId, nome, nota, comentario, quando)
+    .bind(novoId, userId, nome, nota, comentario, aprovada ? 1 : 0, quando)
     .run();
   return { _id: novoId, atualizada: false };
+}
+
+/* -------------------------- avaliações: painel do administrador */
+
+async function avaliacoes_porId(env, avaliacaoId) {
+  const row = await env.DB.prepare('SELECT * FROM avaliacoes WHERE id = ?')
+    .bind(avaliacaoId)
+    .first();
+  return linhaParaAvaliacao(row);
+}
+
+/**
+ * Lista para o painel: pendentes primeiro, depois publicadas, depois ocultas
+ * (com a mesma regra que a rota usa para decidir o que é o quê), mais recentes
+ * antes dentro de cada grupo. O e-mail vem do LEFT JOIN: as avaliações de
+ * exemplo, sem conta, ficam com e-mail nulo.
+ */
+async function avaliacoes_listar(env, { limite = 100 } = {}) {
+  const linhas = await env.DB.prepare(
+    `SELECT a.*, u.email AS usuario_email
+       FROM avaliacoes a
+       LEFT JOIN users u ON u.id = a.user_id
+      ORDER BY
+        CASE WHEN a.aprovada = 0 AND a.nota <= 3 THEN 0
+             WHEN a.aprovada = 1 THEN 1
+             ELSE 2 END,
+        a.criado_em DESC
+      LIMIT ?`
+  )
+    .bind(Number(limite))
+    .all();
+  return (linhas.results || []).map(linhaParaAvaliacao);
+}
+
+const COLUNAS_AVALIACAO = { aprovada: 'aprovada', comentario: 'comentario' };
+
+async function avaliacoes_atualizar(env, avaliacaoId, campos) {
+  const partes = [];
+  const valores = [];
+  for (const [chave, valor] of Object.entries(campos)) {
+    const coluna = COLUNAS_AVALIACAO[chave];
+    if (!coluna) continue;
+    partes.push(`${coluna} = ?`);
+    valores.push(chave === 'aprovada' ? (valor ? 1 : 0) : valor);
+  }
+  if (!partes.length) return;
+
+  await env.DB.prepare(`UPDATE avaliacoes SET ${partes.join(', ')} WHERE id = ?`)
+    .bind(...valores, avaliacaoId)
+    .run();
+}
+
+async function avaliacoes_remover(env, avaliacaoId) {
+  await env.DB.prepare('DELETE FROM avaliacoes WHERE id = ?').bind(avaliacaoId).run();
+}
+
+/** Pendentes = nota baixa aguardando revisão; ocultas não contam. */
+async function avaliacoes_contarPendentes(env) {
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS total FROM avaliacoes WHERE aprovada = 0 AND nota <= 3'
+  ).first();
+  return Number(row?.total || 0);
 }
 
 /* ----------------------------------------------------------------- resets */
@@ -922,6 +988,11 @@ export {
 
   avaliacoes_resumo,
   avaliacoes_salvar,
+  avaliacoes_porId,
+  avaliacoes_listar,
+  avaliacoes_atualizar,
+  avaliacoes_remover,
+  avaliacoes_contarPendentes,
 
   resets_inserir,
   resets_porTokenHash,

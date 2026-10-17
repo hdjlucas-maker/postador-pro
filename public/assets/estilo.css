@@ -532,6 +532,12 @@ tr:last-child td {
   color: #a4262c;
 }
 
+.nota-avaliacao {
+  color: #f5a623;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
 .metrica {
   font-size: 28px;
   font-weight: 700;

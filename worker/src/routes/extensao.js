@@ -16,6 +16,11 @@ import * as db from '../db.js';
 // Nenhuma rota recebe `env` por argumento: o app é montado uma vez no módulo e
 // o objeto de ambiente pertence à requisição, então cada handler lê `c.env`.
 
+// Nota a partir da qual a avaliação do cliente entra publicada direto na
+// janela "Avaliar ferramenta". Abaixo disso (1 a 3), espera aprovação no
+// painel do administrador.
+const NOTA_PUBLICA_DIRETA = 4;
+
 
 function resumoLicenca(env, user) {
   const limites = auth.limitesDoPlano(env, user);
@@ -177,8 +182,9 @@ function criar() {
   });
 
   // Avaliações exibidas na janela "Avaliar ferramenta". Público de propósito:
-  // quem ainda não entrou também vê o que os clientes estão dizendo. Só as
-  // aprovadas aparecem; o envio de um cliente entra como não aprovada.
+  // quem ainda não entrou também vê o que os clientes estão dizendo. Nota alta
+  // (4 ou 5) entra publicada na hora; nota baixa (1 a 3) espera aprovação no
+  // painel — o administrador decide o que aparece, e pode ocultar depois.
   app.get('/avaliacoes', security.limiteD1('avaliacoes', { max: 120 }), async c => {
     const resumo = await db.avaliacoes_resumo(c.env);
     return c.json({
@@ -195,7 +201,7 @@ function criar() {
 
   // Envio exige conta (Bearer). O nome exibido é só o primeiro nome da conta,
   // por privacidade, e uma avaliação por conta: reenviar atualiza a anterior e
-  // volta para a fila de revisão.
+  // ela volta para revisão.
   app.post('/avaliacao', auth.exigirToken(), security.limiteD1('avaliacao', { max: 5, chave: porConta }), async c => {
     const env = c.env;
     const user = c.get('user');
@@ -209,7 +215,13 @@ function criar() {
     const comentario = String(corpo.comentario || '').trim().slice(0, 500);
     const nome = String(user.nome || '').trim().split(/\s+/)[0] || 'Cliente';
 
-    await db.avaliacoes_salvar(env, { userId: user._id, nome, nota, comentario });
+    await db.avaliacoes_salvar(env, {
+      userId: user._id,
+      nome,
+      nota,
+      comentario,
+      aprovada: nota >= NOTA_PUBLICA_DIRETA
+    });
     log.info('avaliacao_registrada', { userId: user._id, nota });
     return c.json({ ok: true });
   });

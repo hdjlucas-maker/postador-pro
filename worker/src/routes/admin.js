@@ -42,10 +42,11 @@ function criar() {
     const env = c.env;
     const cfg = configMod.config(env);
 
-    const [contagem, resumoPagamentos, sistema] = await Promise.all([
+    const [contagem, resumoPagamentos, sistema, avaliacoesPendentes] = await Promise.all([
       db.users_estaEmDia(env),
       db.payments_resumo(env),
-      db.sistema_info(env)
+      db.sistema_info(env),
+      db.avaliacoes_contarPendentes(env)
     ]);
 
     const instaladoEm = sistema?.instalado_em ? new Date(sistema.instalado_em).getTime() : null;
@@ -59,6 +60,7 @@ function criar() {
         bloqueados: Number(contagem?.bloqueados || 0)
       },
       pagamentos: resumoPagamentos,
+      avaliacoes: { pendentes: avaliacoesPendentes },
       sistema: {
         email: cfg.EMAIL_ENABLED,
         pagamento: Boolean(cfg.INFINITEPAY_HANDLE)
@@ -125,6 +127,68 @@ function criar() {
       total,
       totalPages: Math.ceil(total / perPage)
     });
+  });
+
+  // Avaliações da ferramenta. A janela "Avaliar ferramenta" da extensão mostra
+  // só o que o administrador deixou publicado; aqui ele vê tudo — pendentes
+  // (nota 1 a 3 aguardando revisão), publicadas e ocultas — e decide com um
+  // clique: aprovar, ocultar, editar o texto ou excluir.
+  app.get('/admin/avaliacoes', ...soAdmin, async c => {
+    const lista = await db.avaliacoes_listar(c.env, { limite: 100 });
+    return c.json({
+      avaliacoes: lista.map(a => ({
+        id: a._id,
+        nome: a.nome,
+        email: a.usuarioEmail,
+        nota: a.nota,
+        comentario: a.comentario,
+        aprovada: a.aprovada,
+        // Sem conta é avaliação de exemplo (vem da migração 0003).
+        exemplo: !a.userId,
+        criadoEm: a.criadoEm
+      }))
+    });
+  });
+
+  app.post('/admin/avaliacoes/:id/aprovar', ...soAdmin, async c => {
+    const env = c.env;
+    const avaliacao = await db.avaliacoes_porId(env, c.req.param('id'));
+    if (!avaliacao) throw naoEncontrado('Avaliação não encontrada.');
+
+    const body = await c.req.json().catch(() => ({}));
+    const aprovada = Boolean(body.aprovada);
+    await db.avaliacoes_atualizar(env, avaliacao._id, { aprovada });
+
+    log.info('admin_avaliacao_visibilidade', {
+      admin: c.get('user').email,
+      avaliacaoId: avaliacao._id,
+      aprovada
+    });
+    return c.json({ ok: true, aprovada });
+  });
+
+  app.post('/admin/avaliacoes/:id/editar', ...soAdmin, async c => {
+    const env = c.env;
+    const avaliacao = await db.avaliacoes_porId(env, c.req.param('id'));
+    if (!avaliacao) throw naoEncontrado('Avaliação não encontrada.');
+
+    const body = await c.req.json().catch(() => ({}));
+    const comentario = String(body.comentario ?? '').trim().slice(0, 500);
+    await db.avaliacoes_atualizar(env, avaliacao._id, { comentario });
+
+    log.info('admin_avaliacao_editada', { admin: c.get('user').email, avaliacaoId: avaliacao._id });
+    return c.json({ ok: true, comentario });
+  });
+
+  app.delete('/admin/avaliacoes/:id', ...soAdmin, async c => {
+    const env = c.env;
+    const avaliacao = await db.avaliacoes_porId(env, c.req.param('id'));
+    if (!avaliacao) throw naoEncontrado('Avaliação não encontrada.');
+
+    await db.avaliacoes_remover(env, avaliacao._id);
+
+    log.info('admin_avaliacao_excluida', { admin: c.get('user').email, avaliacaoId: avaliacao._id });
+    return c.json({ ok: true });
   });
 
   app.post('/admin/users/:id/redefinir-senha', ...soAdmin, async c => {
