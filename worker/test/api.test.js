@@ -240,7 +240,11 @@ describe('API do Postador Pro sobre Workers + D1', () => {
   it('concede 7 dias de avaliação e informa quando ela expirou', async () => {
     const planosResposta = await SELF.fetch('https://api.postador.test/api/extensao/planos');
     expect(planosResposta.status).toBe(200);
-    expect((await planosResposta.json()).avaliacaoDias).toBe(7);
+    const planos = (await planosResposta.json()).planos;
+    // A janela Assinar / Renovar mostra os dias de cada plano; sem o campo
+    // (p.dias em vez de p.days) o texto saía "undefined dias de publicação".
+    expect(planos.map(p => [p.id, p.dias])).toEqual([['monthly', 30], ['annual', 365]]);
+    expect((await (await SELF.fetch('https://api.postador.test/api/extensao/planos')).json()).avaliacaoDias).toBe(7);
 
     const email = novoEmail();
     const cadastro = await post('/api/extensao/cadastro', {

@@ -28,13 +28,21 @@ function idsDaPagina(nome) {
   return new Set([...lerHtml(nome).matchAll(/id="([^"]+)"/g)].map(captura => captura[1]));
 }
 
+// Elementos que já nascem escondidos no HTML (atributo hidden), como o aviso de
+// retorno do pagamento: o stub precisa começar no mesmo estado do navegador.
+function idsOcultosDaPagina(nome) {
+  return new Set(
+    [...lerHtml(nome).matchAll(/id="([^"]+)"[^>]*\shidden(?=[\s>])/g)].map(captura => captura[1])
+  );
+}
+
 function caminhoLocal(url) {
   const limpo = url.split('?')[0];
   if (/^https?:/i.test(limpo)) return null;
   return new URL(limpo.replace(/^\//, ''), PASTA_PUBLICA);
 }
 
-function criarContexto(idsExistentes) {
+function criarContexto(idsExistentes, { search = '', ocultos = new Set() } = {}) {
   // Elemento genérico por id, com os eventos registrados à parte para as
   // verificações. Ids que não existem no HTML devolvem null, igual ao
   // navegador — é o que pega erro de elemento removido do HTML.
@@ -48,7 +56,7 @@ function criarContexto(idsExistentes) {
       eventosPorId.set(id, registrados);
       elementos.set(id, {
         id,
-        hidden: false,
+        hidden: ocultos.has(id),
         disabled: false,
         value: '',
         textContent: '',
@@ -80,11 +88,13 @@ function criarContexto(idsExistentes) {
       createElement: () => elemento('elemento-novo')
     },
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    location: { search, href: 'https://postador.hdjlucas.workers.dev/', pathname: '/' },
     fetch: async () => ({ ok: true, status: 200, text: async () => '{}' }),
     setTimeout,
     clearTimeout,
     console,
     URL,
+    URLSearchParams,
     Date,
     JSON,
     Math
@@ -92,11 +102,14 @@ function criarContexto(idsExistentes) {
   sandbox.window = sandbox;
   sandbox.window.addEventListener = (evento, fn) => { eventosWindow.push({ evento, fn }); };
 
-  return { contexto: vm.createContext(sandbox), sandbox, eventosPorId, eventosWindow };
+  return { contexto: vm.createContext(sandbox), sandbox, elementos, eventosPorId, eventosWindow };
 }
 
-async function carregarPagina(pagina) {
-  const ambiente = criarContexto(idsDaPagina(pagina.nome));
+async function carregarPagina(pagina, opcoes = {}) {
+  const ambiente = criarContexto(idsDaPagina(pagina.nome), {
+    ocultos: idsOcultosDaPagina(pagina.nome),
+    ...opcoes
+  });
   const carregados = [];
 
   for (const url of pagina.scripts) {
@@ -160,5 +173,27 @@ test('o formulário de login do painel admin registra o envio (submit)', async (
   assert.ok(
     eventosDoFormulario.includes('submit'),
     'o submit do formulário de login não foi registrado — o botão Entrar recarregaria a página sem fazer login'
+  );
+});
+
+test('retorno do checkout na landing mostra o aviso para confirmar na extensão', async () => {
+  // A InfinitePay devolve o usuário para /?pagamento=retorno (redirect_url do
+  // checkout). Sem o aviso, o retorno caía numa página igual e o pagamento
+  // parecia perdido; o aviso orienta a verificar a liberação na extensão.
+  const pagina = paginas.find(item => item.nome === 'index.html');
+  assert.ok(pagina, 'index.html não encontrado');
+
+  const semRetorno = await carregarPagina(pagina);
+  assert.equal(
+    semRetorno.elementos.get('aviso-pagamento')?.hidden,
+    true,
+    'o aviso de retorno do pagamento apareceu numa visita normal da landing'
+  );
+
+  const comRetorno = await carregarPagina(pagina, { search: '?pagamento=retorno' });
+  assert.equal(
+    comRetorno.elementos.get('aviso-pagamento')?.hidden,
+    false,
+    'o aviso não apareceu ao voltar do checkout (/?pagamento=retorno)'
   );
 });

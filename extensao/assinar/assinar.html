@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" sizes="128x128" href="../icons/icon128.png">
+  <title>Assinar / Renovar - Postador Pro</title>
+  <link rel="stylesheet" href="assinar.css">
+</head>
+<body>
+  <header class="cabecalho-marca">
+    <div class="marca-completa"><img src="../icons/icon48.png" alt="" class="logo-pequena"><div><h1>Postador Pro</h1><span class="subtitulo-marca">Assinatura e renovação</span></div></div>
+  </header>
+
+  <main>
+    <section class="bloco">
+      <p class="rotulo">Sua licença</p>
+      <p id="status-assinatura" class="destaque" aria-live="polite">Verificando…</p>
+      <p id="detalhes-assinatura" class="suave"></p>
+    </section>
+
+    <section class="bloco">
+      <p class="rotulo">Escolher plano</p>
+      <p id="carregando-planos" class="suave" aria-live="polite">Carregando planos…</p>
+      <div id="lista-planos"></div>
+      <p id="status-checkout" class="suave" aria-live="polite"></p>
+    </section>
+
+    <section class="bloco">
+      <p class="rotulo">Já pagou e ainda não liberou?</p>
+      <p class="suave">A liberação é automática e costuma levar poucos instantes. Se precisar conferir agora, use o botão abaixo.</p>
+      <button id="botao-verificar" type="button" class="botao secundario">Já paguei — verificar liberação</button>
+      <p id="status-verificar" class="suave" aria-live="polite"></p>
+    </section>
+
+    <div class="acoes">
+      <button id="botao-fechar" type="button" class="botao secundario">Fechar</button>
+    </div>
+
+    <p class="suave rodape-nota">O pagamento é avulso, sem cobrança automática: você escolhe e paga um plano a cada período, direto pela InfinitePay.</p>
+  </main>
+
+  <script src="assinar.js" type="module"></script>
+</body>
+</html>

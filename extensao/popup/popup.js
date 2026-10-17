@@ -65,11 +65,10 @@ async function atualizarTelaPrincipal() {
     }
     $('detalhes-licenca').textContent = detalhes;
 
-    if (estado.acesso && estado.acesso.status === 'trial') {
-      $('botao-assinar').classList.remove('oculta');
-    } else {
-      $('botao-assinar').classList.add('oculta');
-    }
+    // O botão fica visível para qualquer conta logada: na avaliação ele
+    // antecipa a assinatura, no Pro permite renovar e no expirado libera o
+    // acesso. Antes ele sumia no plano Pro e não havia como renovar.
+    $('botao-assinar').classList.remove('oculta');
   } catch (erro) {
     $('status-licenca').textContent = 'Sem conexão';
     $('status-licenca').style.color = 'var(--texto-suave)';
@@ -132,13 +131,10 @@ $('botao-sair').addEventListener('click', async () => {
   mostrar('login');
 });
 
-$('botao-assinar').addEventListener('click', async () => {
-  try {
-    const url = await licenca.criarCheckout('monthly');
-    await chrome.tabs.create({ url });
-  } catch (erro) {
-    $('detalhes-licenca').textContent = erro.message || 'Não deu para gerar o checkout.';
-  }
+// Assinar / Renovar abre a janela da assinatura (planos mensal e anual,
+// verificação de pagamento) sem disparar cobrança direto do popup.
+$('botao-assinar').addEventListener('click', () => {
+  chrome.windows.create({ url: chrome.runtime.getURL('assinar/assinar.html'), type: 'popup', width: 480, height: 760 });
 });
 
 $('botao-campanhas').addEventListener('click', () => {

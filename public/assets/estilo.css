@@ -742,3 +742,9 @@ tr:last-child td {
 .aceite-download-check input { margin-top:4px; }
 .aceite-download-acoes, .aviso-plano-acoes { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
 .aceite-download button:disabled, .aviso-plano button:disabled { opacity:.55; cursor:not-allowed; }
+
+/* Retorno do checkout da InfinitePay (/?pagamento=retorno): orienta o usuário
+   a confirmar a liberação dentro da extensão, sem prometer prazo exato. */
+.aviso-pagamento { margin:16px 0 0; padding:14px 16px; background:var(--azul-claro); border:1px solid #c9e1ff; border-radius:12px; }
+.aviso-pagamento h3 { margin:0 0 6px; font-size:16px; }
+.aviso-pagamento p { margin:0; color:var(--texto-suave); font-size:14px; }

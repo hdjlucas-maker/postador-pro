@@ -110,7 +110,8 @@ function verificarElementos(arquivos) {
   const paginas = [
     ['options/options.js', 'options/options.html'],
     ['popup/popup.js', 'popup/popup.html'],
-    ['avaliar/avaliar.js', 'avaliar/avaliar.html']
+    ['avaliar/avaliar.js', 'avaliar/avaliar.html'],
+    ['assinar/assinar.js', 'assinar/assinar.html']
   ];
   for (const [js, html] of paginas) {
     if (!arquivos.includes(js) || !arquivos.includes(html)) continue;

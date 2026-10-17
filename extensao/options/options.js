@@ -259,6 +259,11 @@ function atualizarResumoRitmo() {
 
 $('atalho-ritmo').addEventListener('click', async () => { await carregarRitmo(); mostrar('ritmo'); });
 $('atalho-faq').addEventListener('click', () => mostrar('ajuda'));
+// Assinar / Renovar fica sempre no topo do painel: é por aqui que o cliente
+// assina ou renova a licença depois da avaliação (mesma janela do popup).
+$('botao-assinar').addEventListener('click', () => {
+  chrome.windows.create({ url: chrome.runtime.getURL('assinar/assinar.html'), type: 'popup', width: 480, height: 760 });
+});
 $('botao-voltar-ajuda').addEventListener('click', () => mostrar('campanhas'));
 $('campo-delay-min').addEventListener('input', atualizarResumoRitmo);
 $('campo-delay-max').addEventListener('input', atualizarResumoRitmo);

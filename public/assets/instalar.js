@@ -47,6 +47,19 @@ async function carregarPlanos() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  // Retorno do checkout da InfinitePay: o servidor usa /?pagamento=retorno
+  // como redirect_url. A licença é liberada pelo webhook e confirmada dentro
+  // da extensão, então o aviso orienta o próximo passo para o pagamento não
+  // parecer perdido. A página não tem sessão do usuário: só orienta.
+  const avisoPagamento = document.getElementById('aviso-pagamento');
+  if (avisoPagamento) {
+    let voltouDoPagamento = false;
+    try {
+      voltouDoPagamento = new URLSearchParams(window.location.search).get('pagamento') === 'retorno';
+    } catch (_) {}
+    if (voltouDoPagamento) avisoPagamento.hidden = false;
+  }
+
   const modalAceite = document.getElementById('aceite-download');
   const checkboxAceite = document.getElementById('aceite-download-checkbox');
   const botaoAceitar = document.getElementById('aceite-download-confirmar');

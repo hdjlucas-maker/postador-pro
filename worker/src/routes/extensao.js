@@ -59,7 +59,7 @@ function criar() {
   app.get('/planos', c => {
     const cfg = configMod.config(c.env);
     return c.json({
-      planos: Object.values(cfg.PLANS).map(p => ({ id: p.id, nome: p.name, preco: p.price, dias: p.dias })),
+      planos: Object.values(cfg.PLANS).map(p => ({ id: p.id, nome: p.name, preco: p.price, dias: p.days })),
       limites: cfg.PLAN_LIMITS,
       avaliacaoDias: cfg.TRIAL_DAYS,
       pago: Boolean(cfg.INFINITEPAY_HANDLE)
