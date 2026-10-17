@@ -27,5 +27,5 @@ Atualizada em 17/10/2026.
 - [ ] Testar o pagamento real na InfinitePay ponta a ponta (checkout -> webhook -> liberação). É o último teste combinado.
 - [ ] Decidir o destino do botão "Gerar 3 variações" (a rota `/api/extensao/gerar-textos` não existe no worker; botão desabilitado com aviso).
 - [ ] Recuperação de senha por e-mail: precisa de domínio próprio + binding `EMAIL` no worker (hoje o caminho é o painel/WhatsApp).
-- [ ] Publicar na Chrome Web Store (fase 3): item criado em rascunho e pacote 1.0.53 enviado (17/10/2026); Item ID `bcgeojfhaipebhjfadchndghefmkmjca` já liberado no `EXTENSAO_IDS` do worker com deploy conferido em produção. Falta preencher a ficha (descrição, categoria, prints, blocos promocionais e privacidade — textos prontos em `LOJA.md`) e enviar para revisão.
+- [ ] Publicar na Chrome Web Store (fase 3): **enviado para revisão em 17/10/2026** (e-mail verificado; ficha, privacidade, prints e blocos promocionais preenchidos). Item ID `bcgeojfhaipebhjfadchndghefmkmjca` já liberado no `EXTENSAO_IDS` do worker com deploy conferido em produção. Aguardando aprovação; quando publicar, decidir o botão "Adicionar ao Chrome" na landing.
 - [ ] Acompanhar o grupo "Point de Divulgação 2": uma falha "Publicação não confirmada" (pode ser regra do próprio grupo).

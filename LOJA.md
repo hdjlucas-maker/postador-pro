@@ -11,6 +11,7 @@ Atualizado em 17/10/2026.
   no rodapé público da ficha. A confirmação pode levar alguns dias e a escolha pode ser
   alterada depois.
 - Item criado na loja em 17/10/2026 (rascunho): pacote 1.0.53 enviado com sucesso. **Item ID: `bcgeojfhaipebhjfadchndghefmkmjca`** — diferente do ID da instalação manual (`aaegnkekaabiomfkpmpbhodliomgkdna`); os dois já estão em `EXTENSAO_IDS` no worker, com deploy feito e conferido em produção.
+- **Enviado para revisão em 17/10/2026** (e-mail verificado). Quando aprovar, publica automaticamente.
 - Pacote de upload pronto: `npm run empacotar:loja` gera `dist/postador-pro-loja.zip`
   (manifest.json na raiz, sem a `key` de desenvolvimento; `dist/` não é versionado).
 - Prints 1280x800 prontos em `public/loja/` (gerados com a extensão real e dados de exemplo).
