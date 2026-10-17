@@ -7,7 +7,6 @@ import * as licenca from '../lib/licenca.js';
 
 const $ = id => document.getElementById(id);
 
-let imagemSelecionada = null; // { id, blob }
 let campanhaEditando = null;
 let salvandoCampanha = false;
 let geracaoIaEmCurso = false;
@@ -295,9 +294,6 @@ async function abrirForm(nova) {
     $('campo-destinos').value = '';
     $('campo-agendar').checked = false;
     $('campo-horario').classList.add('oculta');
-    $('preview-imagem').classList.add('oculta');
-    imagemSelecionada = null;
-    $('campo-imagem').value = '';
     $('erro-form').classList.add('oculta');
   }
   await carregarRitmo();
@@ -321,17 +317,6 @@ async function editarCampanha(id) {
   $('campo-agendar').checked = Boolean(campanha.agendadoPara);
   $('campo-horario').classList.toggle('oculta', !$('campo-agendar').checked);
   if (campanha.agendadoPara) $('campo-horario').value = new Date(campanha.agendadoPara).toISOString().slice(0, 16);
-  imagemSelecionada = null;
-  $('preview-imagem').classList.add('oculta');
-  if (campanha.imagemId) {
-    const blob = await armazenamento.buscarImagem(campanha.imagemId).catch(() => null);
-    if (blob) {
-      imagemSelecionada = { id: campanha.imagemId, blob };
-      $('miniatura').src = URL.createObjectURL(blob);
-      $('preview-imagem').classList.remove('oculta');
-  atualizarPreview();
-    }
-  }
   atualizarPreview();
   mostrar('form');
 }
@@ -344,14 +329,6 @@ async function reutilizarCampanha(id) {
   $('campo-nome').value = `${original.nome} (cópia)`;
   renderizarCamposMensagens(original.textos || ['']);
   $('campo-destinos').value = (original.destinosOriginais || original.destinos || []).join('\n');
-  if (original.imagemId) {
-    const blob = await armazenamento.buscarImagem(original.imagemId).catch(() => null);
-    if (blob) {
-      imagemSelecionada = { id: original.imagemId, blob };
-      $('miniatura').src = URL.createObjectURL(blob);
-      $('preview-imagem').classList.remove('oculta');
-    }
-  }
   $('contador-destinos').textContent = `${(original.destinosOriginais || original.destinos || []).length} destino(s)`;
   atualizarContadorTextos();
   atualizarPreview();
@@ -429,38 +406,10 @@ $('campo-destinos').addEventListener('input', () => {
   $('contador-destinos').textContent = `${n} destino(s)`; atualizarPreview();
 });
 
-$('campo-imagem').addEventListener('change', async () => {
-  const arquivo = $('campo-imagem').files[0];
-  if (!arquivo) return;
-  if (arquivo.size > CONFIG.MAX_IMAGE_BYTES) {
-    $('erro-form').textContent = `A imagem precisa ter no máximo ${Math.round(CONFIG.MAX_IMAGE_BYTES / 1024 / 1024)} MB.`;
-    $('erro-form').classList.remove('oculta');
-    return;
-  }
-  const id = `img_${Date.now()}`;
-  await armazenamento.salvarImagem(id, arquivo);
-  imagemSelecionada = { id, blob: arquivo };
-  $('miniatura').src = URL.createObjectURL(arquivo);
-  $('preview-imagem').classList.remove('oculta');
-  atualizarPreview();
-  $('erro-form').classList.add('oculta');
-});
-
-$('remover-imagem').addEventListener('click', () => {
-  // A imagem pode pertencer a outra campanha reutilizada; só retiramos esta
-  // referência. A limpeza de imagens sem uso fica a cargo da exclusão da campanha.
-  imagemSelecionada = null;
-  $('campo-imagem').value = '';
-  $('preview-imagem').classList.add('oculta');
-  atualizarPreview();
-});
-
 function atualizarPreview() {
   const destinos = $('campo-destinos').value.split('\n').map(d => d.trim()).filter(Boolean);
   $('preview-nome').textContent = $('campo-nome').value || '—';
   $('preview-grupos').textContent = destinos.length;
-  const nomeImagem = imagemSelecionada?.blob?.name || '';
-  $('preview-imagem-texto').textContent = imagemSelecionada ? (nomeImagem || 'configurada') : 'não configurada';
   const quantidadeTextos = obterMensagens().length;
   $('preview-texto').textContent = quantidadeTextos ? `${quantidadeTextos} variação(ões)` : 'não configurado';
   const min = Math.round(ritmoAtual.minMs / 60000);
@@ -497,7 +446,7 @@ async function salvarCampanha(modo = 'salvar') {
       textos: obterMensagens(),
       destinos,
       destinosOriginais: destinos,
-      imagemId: imagemSelecionada ? imagemSelecionada.id : null,
+      imagemId: null,
       agendadoPara,
       status: 'ativa'
     };
