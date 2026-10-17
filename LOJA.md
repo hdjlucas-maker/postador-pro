@@ -71,44 +71,68 @@ Suporte: botão de WhatsApp e e-mail dentro da extensão.
 **URLs**:
 
 - Página inicial / site: `https://postador.hdjlucas.workers.dev/`
-- Política de privacidade: `https://postador.hdjlucas.workers.dev/privacidade.html`
-- Termos de uso (referência): `https://postador.hdjlucas.workers.dev/termos.html`
+- Política de privacidade: `https://postador.hdjlucas.workers.dev/privacidade` (o endereço `.html` redireciona para essa URL final)
+- Termos de uso (referência): `https://postador.hdjlucas.workers.dev/termos`
 - Suporte: `https://postador.hdjlucas.workers.dev/` (e-mail e WhatsApp também estão na extensão)
 
-## Justificativas (aba de privacidade)
+## Justificativas (aba Privacidade) — textos prontos
 
-**Propósito único**:
+Todos os campos aceitam até 1.000 caracteres; os textos abaixo cabem com folga.
+
+**Descrição do único propósito**:
 
 ```
-Publicar, em grupos do Facebook onde o usuário é membro, as divulgações que ele mesmo escreve, com agendamento e intervalos controlados entre os grupos.
+O Postador Pro tem um único propósito: publicar, em grupos do Facebook onde o usuário já é membro, as divulgações que ele mesmo escreve, com agendamento e intervalos controlados entre os grupos. O usuário monta a campanha (mensagens, imagem opcional e lista dos grupos), inicia ou agenda, e a extensão abre um grupo por vez, preenche o compositor de publicação do próprio Facebook e publica, respeitando os limites diários do plano. A extensão não curte, não comenta, não envia mensagens diretas nem interage em nome do usuário fora das publicações que ele mesmo criou.
 ```
 
-**Código remoto**: Não. Todo o JavaScript da extensão vem dentro do pacote; o servidor da API
-troca apenas dados (conta, licença e contador diário de publicações).
+**Justificativa de storage**:
 
-**Permissões** (uma justificativa para cada):
+```
+Guardar no próprio navegador do usuário o que a campanha precisa: mensagens, links dos grupos de destino, imagem da publicação, histórico de resultados por grupo, preferências e o estado local da licença (para mostrar plano e limites). São dados do próprio usuário, usados apenas para o funcionamento do produto — nada é coletado para publicidade ou perfilamento.
+```
 
-- `storage`: guardar campanhas, textos, imagens, grupos, histórico e preferências no próprio navegador do usuário.
-- `alarms`: disparar publicações agendadas e esperar o intervalo aleatório entre um grupo e outro sem manter a aba ocupada.
-- `tabs`: abrir ou localizar a aba do grupo do Facebook em que a publicação será inserida e acompanhar o carregamento da página.
-- `scripting`: injetar o script que preenche o compositor de publicação somente quando o usuário inicia uma campanha.
-- Host `facebook.com` (www, web e m): preencher e publicar no compositor do Facebook, nos grupos abertos pelo próprio app durante uma campanha ativa.
-- Host `postador.hdjlucas.workers.dev`: validar a conta e a licença e registrar o contador diário de publicações do plano contratado.
+**Justificativa de alarms**:
 
-**Uso de dados** (marcar e explicar):
+```
+Disparar as publicações nos horários que o usuário escolher e aguardar o intervalo aleatório entre um grupo e outro (padrão de 10 a 20 minutos) sem manter abas ocupadas ou em execução contínua. Os alarmes só são criados quando o usuário inicia ou agenda uma campanha.
+```
 
-- Informações de identificação pessoal (nome e e-mail): criar a conta, identificar o login e dar suporte.
-- Informações de autenticação (senha): usada apenas no login; o servidor guarda só o hash, nunca a senha em si.
-- Informações de pagamento e financeiras: histórico dos pagamentos (valor, data, status e identificador da transação) para liberar e renovar o plano. Os dados do cartão são processados somente pela InfinitePay e nunca passam pela extensão nem pelo servidor.
-- Atividade do usuário (contador de publicações por dia): aplicar o limite do plano.
+**Justificativa de tabs**:
 
-Não marcar saúde, comunicações pessoais, localização, histórico da web nem conteúdo de sites:
-a extensão lê a página do grupo apenas para operar a publicação (nada disso é coletado ou
-transmitido). As mensagens das campanhas ficam no navegador do usuário.
+```
+Abrir ou localizar a aba do grupo do Facebook escolhido pelo usuário, navegar até o grupo durante a campanha e acompanhar o carregamento da página antes de preencher a publicação. Não é usada para ler, coletar ou alterar conteúdo de outras abas.
+```
 
-**Perguntas de sim/não**: dados criptografados em trânsito (HTTPS) — sim; vendidos a terceiros —
-não; usados para finalidade não relacionada ao propósito único — não; usados para avaliar
-crédito ou empréstimo — não.
+**Justificativa de scripting**:
+
+```
+Injetar o script que preenche o compositor de publicação do Facebook (texto e imagem) e lê o resultado da operação, somente quando uma campanha do usuário está em andamento e apenas na página do grupo que será publicado. O script injetado vem do próprio pacote da extensão; nenhum código remoto é baixado ou executado.
+```
+
+**Justificativa de Permissão do host**:
+
+```
+O acesso ao facebook.com (www, web e m) é necessário para operar a publicação na página do grupo, apenas durante uma campanha ativa iniciada pelo usuário. O acesso a postador.hdjlucas.workers.dev é necessário para o servidor do produto criar e autenticar a conta, validar a licença do usuário e registrar o contador diário de publicações do plano. Nenhum dos acessos é usado para coletar o histórico de navegação do usuário.
+```
+
+**Código remoto**: marcar "Não, não estou usando Código remoto". Se o campo de justificativa for pedido mesmo assim:
+
+```
+Não. Todo o JavaScript da extensão está dentro do pacote enviado. A comunicação com o servidor do produto é apenas de dados (conta, licença e contador diário de publicações); nada recebido do servidor é avaliado ou executado como código.
+```
+
+**Uso de dados** (marcar estas quatro):
+
+- Informações de identificação pessoal — nome e e-mail, para criar a conta e dar suporte.
+- Informações financeiras e de pagamento — histórico dos pagamentos (valor, data, status e identificador da transação), para liberar e renovar o plano. Dados do cartão são processados somente pela InfinitePay e nunca passam pela extensão nem pelo servidor.
+- Informações de autenticação — senha usada no login; o servidor guarda apenas o hash, nunca a senha em si.
+- Atividade do usuário — contador de publicações por dia, para aplicar o limite do plano.
+
+Não marcar: saúde, comunicações pessoais, local, histórico da Web nem conteúdo do site. A extensão lê a página do grupo apenas para operar a publicação (nada é armazenado ou transmitido), e as mensagens das campanhas ficam no navegador do usuário.
+
+**Declarações**: marcar as três (não vende dados; não usa para fins fora do propósito único; não usa para crédito ou empréstimo).
+
+**URL da Política de Privacidade**: `https://postador.hdjlucas.workers.dev/privacidade` (o endereço `.html` redireciona para essa URL final).
 
 ## Prints (1280x800)
 
