@@ -61,6 +61,7 @@ input[type="text"], input[type="datetime-local"], textarea, select {
 .gerador-ia .linha { align-items: end; justify-content: initial; flex-wrap: wrap; }
 .gerador-ia .linha label { margin: 0; }
 .gerador-ia .linha select { flex: 1 1 180px; min-width: 0; }
+input[type="file"] { font-size: 13px; }
 .botao {
   padding: 10px 18px;
   border: none;
@@ -76,6 +77,7 @@ input[type="text"], input[type="datetime-local"], textarea, select {
 .botao-link { border: none; background: none; color: var(--texto-suave); cursor: pointer; font-size: 13px; padding: 0; }
 .erro { color: var(--vermelho); font-size: 13px; margin: 10px 0 0; }
 .oculta { display: none !important; }
+#preview-imagem img { max-width: 120px; border-radius: var(--raio); margin: 8px 0; }
 .cartao-campanha {
   border: 1px solid var(--borda-suave);
   border-radius: var(--raio);

@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const fonte = await readFile(new URL('../extensao/content/facebook.js', import.meta.url), 'utf8');
 
-function iniciarContent({ document, date = Date, setTimeoutFn = setTimeout }) {
+function iniciarContent({ document, date = Date, setTimeoutFn = setTimeout, extras = {} }) {
   let listener;
   const chrome = {
     runtime: {
@@ -13,7 +13,7 @@ function iniciarContent({ document, date = Date, setTimeoutFn = setTimeout }) {
       sendMessage: async () => ({ ok: true })
     }
   };
-  vm.runInNewContext(fonte, { chrome, document, location: { pathname: '/groups/123456789', href: 'https://www.facebook.com/groups/123456789', origin: 'https://www.facebook.com' }, URL, Date: date, setTimeout: setTimeoutFn, console });
+  vm.runInNewContext(fonte, { chrome, document, location: { pathname: '/groups/123456789', href: 'https://www.facebook.com/groups/123456789', origin: 'https://www.facebook.com' }, URL, Date: date, setTimeout: setTimeoutFn, console, ...extras });
   return mensagem => new Promise(resolve => listener(mensagem, {}, resolve));
 }
 
@@ -119,4 +119,114 @@ test('não clica em Publicar quando o editor não aceita o texto', async () => {
   assert.match(resultado.erro, /não aceitou o texto/);
   assert.match(resultado.erro, /Nenhuma publicação foi enviada/);
   assert.equal(cliquesNoPublicar, 0);
+});
+
+test('imagem: base64 chega íntegro e é injetada como arquivo real no compositor', async () => {
+  // Bytes de um JPEG mínimo (cabeçalho FF D8 FF). O que este teste protege:
+  // o service worker envia a imagem em base64 porque o messaging do Chrome só
+  // transporta JSON; se voltar a mandar bytes crus (ArrayBuffer/Blob), o
+  // conteúdo chega vazio e o Facebook recusa com "Não é possível ler arquivo".
+  const bytesImagem = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+  const base64 = bytesImagem.toString('base64');
+
+  const previas = [];
+  const input = {
+    files: null,
+    dispatchEvent(evento) {
+      if (evento && evento.type === 'change' && previas.length === 0) {
+        previas.push({
+          tagName: 'IMG',
+          src: 'blob:previa-teste',
+          currentSrc: '',
+          getAttribute: () => '',
+          getBoundingClientRect: () => ({ width: 10, height: 10 })
+        });
+      }
+      return true;
+    },
+    focus() {}
+  };
+  const dialogo = {
+    innerText: 'Create post',
+    isConnected: true,
+    getBoundingClientRect: () => ({ top: 0, left: 0, width: 100, height: 100 }),
+    appendChild() {},
+    querySelector(seletor) {
+      if (seletor.includes('heading') || seletor.includes('h1')) return { textContent: 'Create post' };
+      if (seletor.includes('input[type="file"]')) return input;
+      return null;
+    },
+    querySelectorAll(seletor) {
+      if (seletor === 'img, video') return previas;
+      return [];
+    }
+  };
+  const editor = elemento({ dialogo, texto: '' });
+  const feed = [];
+  const botaoPublicar = elemento({ dialogo, texto: 'Post', click: () => { feed.push(elemento({ texto: 'Oferta especial de teste' })); } });
+  botaoPublicar.style = {};
+  botaoPublicar.setAttribute = () => {};
+  botaoPublicar.removeAttribute = () => {};
+  const document = {
+    body: { innerText: '' },
+    createElement: () => ({ style: {}, textContent: '' }),
+    querySelector: () => null,
+    execCommand(acao, _ui, valor) {
+      if (acao === 'insertText') editor.textContent = valor;
+      return true;
+    },
+    querySelectorAll(seletor) {
+      if (seletor.includes('contenteditable') || seletor.includes('aria-label*="Escreva"') || seletor.includes('aria-label*="Write"')) return [editor];
+      if (seletor.includes('aria-label="Publicar"') || seletor.includes('aria-label="Post"') || seletor.includes('button[type="submit"]')) return [botaoPublicar];
+      if (seletor.includes('[role="article"]')) return feed;
+      return [];
+    }
+  };
+
+  class ArquivoFalso {
+    constructor(partes, nome, opcoes = {}) {
+      this.name = nome;
+      this.type = opcoes.type || '';
+      this.partes = partes;
+      this.size = partes.reduce((soma, parte) => soma + (parte && typeof parte.byteLength === 'number' ? parte.byteLength : String(parte).length), 0);
+    }
+  }
+  class TransferenciaFalsa {
+    constructor() {
+      this.items = { add: arquivo => { this.files = [arquivo]; } };
+    }
+  }
+  class EventoFalso {
+    constructor(tipo) { this.type = tipo; }
+  }
+  let agora = 0;
+  class DateImagem extends Date {
+    static now() { agora += 500; return agora; }
+  }
+
+  const receber = iniciarContent({
+    document,
+    date: DateImagem,
+    setTimeoutFn: fn => { fn(); return 0; },
+    extras: { atob, DataTransfer: TransferenciaFalsa, File: ArquivoFalso, Event: EventoFalso }
+  });
+  const resultado = await receber({
+    tipo: 'publicar',
+    texto: 'Oferta especial de teste',
+    imagemBase64: base64,
+    imagemTipo: 'image/jpeg',
+    imagemNome: 'foto.jpg',
+    cadenciaMin: 1,
+    cadenciaMax: 1,
+    grupoEsperado: 'https://www.facebook.com/groups/123456789'
+  });
+
+  assert.equal(resultado.ok, true, resultado.erro);
+  assert.equal(resultado.confirmacao, 'feed');
+  assert.equal(editor.textContent, 'Oferta especial de teste');
+  assert.ok(input.files && input.files[0], 'a imagem deveria ter sido injetada no input do compositor');
+  assert.equal(input.files[0].name, 'foto.jpg');
+  assert.equal(input.files[0].type, 'image/jpeg');
+  assert.equal(input.files[0].size, bytesImagem.length);
+  assert.deepEqual(Array.from(input.files[0].partes[0]), Array.from(bytesImagem));
 });

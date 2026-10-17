@@ -36,7 +36,8 @@
           <div class="painel-hero-emoji">📣</div>
         </div>
         <div class="atalhos-recursos">
-          <button class="recurso" id="atalho-nova" type="button"><span>✍️</span><strong>Nova campanha</strong><small>Texto e destinos</small></button>
+          <button class="recurso" id="atalho-nova" type="button"><span>✍️</span><strong>Nova campanha</strong><small>Texto, imagem e destinos</small></button>
+          <div class="recurso"><span>🖼️</span><strong>Imagem</strong><small>A foto vai junto com o texto</small></div>
           <div class="recurso"><span>⏰</span><strong>Agendamento</strong><small>Escolha o melhor horário</small></div>
           <button class="recurso" id="atalho-ritmo" type="button"><span>🛡️</span><strong>Ritmo controlado</strong><small id="resumo-ritmo">Intervalo entre grupos</small></button>
           <button class="recurso" id="atalho-feedback" type="button"><span>💬</span><strong>Avaliar ferramenta</strong><small>Conte o que devemos melhorar</small></button>
@@ -64,7 +65,7 @@
         <div class="faq-item"><strong>Como publicar imediatamente?</strong><p>Crie a campanha e clique em <b>Postar agora</b>. A extensão publica um grupo por vez.</p></div>
         <div class="faq-item"><strong>Como funciona o intervalo?</strong><p>O Ritmo controlado espera entre uma publicação e outra. O navegador precisa continuar aberto para a fila continuar.</p></div>
         <div class="faq-item"><strong>Como agendar?</strong><p>Marque Agendar publicação, escolha um horário pelo menos 2 minutos à frente. A campanha será publicada no horário agendado.</p></div>
-        <div class="faq-item"><strong>Posso usar emojis?</strong><p>Sim. A mensagem aceita emojis. No Facebook, o compositor precisa estar disponível e você precisa estar logado.</p></div>
+        <div class="faq-item"><strong>Posso usar imagem e emojis?</strong><p>Sim. A imagem escolhida vai junto com o texto na postagem e as mensagens aceitam emojis. No Facebook, o compositor precisa estar disponível e você precisa estar logado.</p></div>
         <div class="faq-item"><strong>O Postador garante curtidas ou reações?</strong><p>Não. Ele organiza e publica o conteúdo; curtidas e reações dependem das pessoas e do Facebook. A ferramenta não cria interações artificiais.</p></div>
         <div class="faq-item"><strong>Limite recomendado</strong><p>Use no máximo 5 grupos por dia em contas novas. Para contas estabelecidas, mantenha até 10 grupos por dia, com 10 a 15 minutos entre posts. Se precisar de mais, divida em turnos com uma pausa longa.</p></div>
         <div class="faq-item"><strong>Uso responsável</strong><p>Publique somente onde você tem permissão, respeite as regras de cada grupo, evite repetir a mesma mensagem e pare se o Facebook mostrar um aviso. A extensão não publica comentários, não curte e não cria reações.</p></div>
@@ -122,6 +123,11 @@
         <p class="suave">Cada caixa é uma mensagem independente; parágrafos dentro dela ficam juntos. A campanha usa a mensagem 1 no primeiro grupo, a 2 no segundo e assim por diante; depois da última, volta à primeira. A fila mostra qual mensagem foi usada em cada destino.</p>
         <p class="suave" id="contador-texto">0 mensagem(ns)</p>
 
+        <label>Imagem do anúncio (opcional)</label>
+        <input type="file" id="campo-imagem" accept="image/*">
+        <div id="preview-imagem" class="oculta"><img id="miniatura" alt=""><button type="button" id="remover-imagem" class="botao-link">Remover imagem</button></div>
+        <p class="suave">A imagem vai junto com o texto na postagem. Formatos: PNG, JPEG, WebP ou GIF, até 8 MB.</p>
+
         <label>Grupos de destino (um link ou ID por linha)</label>
         <textarea id="campo-destinos" rows="5" placeholder="https://www.facebook.com/groups/123456789 ou 123456789"></textarea>
         <p class="suave" id="contador-destinos">0 destinos</p>
@@ -133,6 +139,7 @@
           <h3>Pré-visualização da campanha</h3>
           <p><strong>Campanha:</strong> <span id="preview-nome">—</span></p>
           <p><strong>Grupos selecionados:</strong> <span id="preview-grupos">0</span></p>
+          <p><strong>Imagem:</strong> <span id="preview-imagem-texto">não configurada</span></p>
           <p><strong>Texto:</strong> <span id="preview-texto">não configurado</span></p>
           <p><strong>Intervalo:</strong> <span id="preview-intervalo">10–20 minutos</span></p>
           <p><strong>Primeira publicação:</strong> <span id="preview-inicio">agora</span></p>

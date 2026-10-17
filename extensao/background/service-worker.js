@@ -273,17 +273,38 @@ async function publicarEmDestino(campanha, destino) {
     return { ok: false, retentavel: true, erro: 'Não consegui ativar a publicação nesta página do Facebook. Nenhuma publicação foi iniciada.' };
   }
 
-  // Imagens desativadas na interface da extensão. Campanhas antigas que ainda
-  // tenham imagemId salvo no armazenamento são publicadas apenas com texto,
-  // sem tentar anexar nada.
-  const imagemDados = null;
-  const imagemTipo = null;
-  const imagemNome = null;
+  // Carrega a imagem do IndexedDB e converte para base64. O canal de mensagens
+  // do Chrome entre o service worker e a página só transporta JSON: bytes crus
+  // (ArrayBuffer/Blob) chegam vazios do outro lado. Era isso que fazia o
+  // Facebook recusar toda imagem com "Não é possível ler arquivo" — o arquivo
+  // chegava sem conteúdo. O base64 preserva os bytes até a página.
+  let imagemBase64 = null;
+  let imagemTipo = null;
+  let imagemNome = null;
+  if (campanha.imagemId) {
+    const blob = await armazenamento.buscarImagem(campanha.imagemId);
+    if (!blob || !blob.size) {
+      return { ok: false, pausar: true, retentavel: true, erro: 'A imagem selecionada não está mais disponível no armazenamento da extensão. Nenhuma publicação foi enviada.' };
+    }
+    imagemTipo = String(blob.type || '').toLowerCase();
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(imagemTipo)) {
+      return { ok: false, pausar: true, retentavel: true, erro: `Formato de imagem não aceito (${imagemTipo || 'desconhecido'}). Use PNG, JPEG, WebP ou GIF. Nenhuma publicação foi enviada.` };
+    }
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (!bytes.byteLength) {
+      return { ok: false, pausar: true, retentavel: true, erro: 'O arquivo de imagem está vazio. Nenhuma publicação foi enviada.' };
+    }
+    const validacao = validarImagemAntesEnviar(bytes, imagemTipo);
+    if (!validacao.ok) {
+      return { ok: false, pausar: true, retentavel: true, erro: `${validacao.erro} Nenhuma publicação foi enviada.` };
+    }
+    imagemBase64 = bytesParaBase64(bytes);
+    imagemNome = blob.name || '';
+  }
 
   const selecaoTexto = escolherTexto(campanha);
   const texto = selecaoTexto.texto;
 
-  // ArrayBuffer atravessa o messaging de extensão de forma confiável; Blob não.
   await atualizarStatus('publicando', `Enviando a nova postagem para ${destino}.`, { campanhaId: campanha.id, destino, textoUsado: texto });
   const controle = await armazenamento.carregarEstado();
   const campanhaControle = controle.campanhas.find(item => item.id === campanha.id);
@@ -298,7 +319,7 @@ async function publicarEmDestino(campanha, destino) {
   const resposta = await chrome.tabs.sendMessage(aba.id, {
     tipo: 'publicar',
     texto,
-    imagemDados,
+    imagemBase64,
     imagemTipo,
     imagemNome,
     grupoEsperado: url,
@@ -422,6 +443,37 @@ function extrairIdGrupo(urlOuDestino) {
   } catch (_) {
     return String(urlOuDestino || '').trim();
   }
+}
+
+// Converte os bytes para base64 em blocos para não estourar a pilha com
+// arquivos grandes. O messaging do Chrome só transporta JSON.
+function bytesParaBase64(bytes) {
+  let binario = '';
+  const passo = 0x8000;
+  for (let i = 0; i < bytes.length; i += passo) {
+    binario += String.fromCharCode.apply(null, bytes.subarray(i, i + passo));
+  }
+  return btoa(binario);
+}
+
+// Verifica os "magic bytes" (cabeçalho do arquivo) para confirmar que o tipo
+// MIME declarado confere com o conteúdo real. O Facebook rejeita arquivos
+// cujo tipo não bate com os bytes iniciais.
+function tipoMimePorCabecalho(bytes) {
+  const b0 = bytes[0], b1 = bytes[1], b2 = bytes[2], b3 = bytes[3];
+  if (b0 === 0xff && b1 === 0xd8 && b2 === 0xff) return 'image/jpeg';
+  if (b0 === 0x89 && b1 === 0x50 && b2 === 0x4e && b3 === 0x47) return 'image/png';
+  if (b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46) return 'image/webp';
+  if (b0 === 0x47 && b1 === 0x49 && b2 === 0x46 && b3 === 0x38) return 'image/gif';
+  return null;
+}
+
+function validarImagemAntesEnviar(bytes, tipoDeclarado) {
+  const mimeValidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!mimeValidos.includes(tipoDeclarado)) return { ok: false, erro: `Tipo de imagem não suportado (${tipoDeclarado || 'desconhecido'}). Use PNG, JPEG, WebP ou GIF.` };
+  const mimeReal = tipoMimePorCabecalho(bytes);
+  if (mimeReal && mimeReal !== tipoDeclarado) return { ok: false, erro: `O arquivo não parece ser uma imagem ${tipoDeclarado} válida. O Facebook pode rejeitá-lo.` };
+  return { ok: true };
 }
 
 function esperar(ms) {

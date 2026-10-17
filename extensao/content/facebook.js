@@ -37,6 +37,16 @@ function esperar(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Remonta os bytes originais da imagem a partir do base64. O service worker
+// envia base64 porque o messaging do Chrome só transporta JSON; bytes crus
+// chegavam vazios e o Facebook recusava com "Não é possível ler arquivo".
+function base64ParaBytes(base64) {
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i += 1) bytes[i] = binario.charCodeAt(i);
+  return bytes;
+}
+
 // Cria um aviso visual "aguarde" próximo ao botão de publicar para o usuário
 // saber que a imagem está sendo processada e não clicar prematuramente.
 function criarAvisoAguarde(dialogo, botao) {
@@ -306,6 +316,7 @@ async function anexarImagem(dados, tipo, nomeOriginal) {
 
   const mime = String(tipo || '').toLowerCase();
   if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime)) return { ok: false };
+  if (!dados || !dados.byteLength) return { ok: false };
   const nome = nomeSeguroDaImagem(nomeOriginal, mime);
   const arquivo = new File([dados], nome, { type: mime, lastModified: Date.now() });
   if (!arquivo.size || arquivo.type !== mime) return { ok: false };
@@ -527,7 +538,7 @@ function nomeGrupoVisivel() {
   return '';
 }
 
-async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMin, cadenciaMax, grupoEsperado }) {
+async function publicar({ texto, imagemBase64, imagemTipo, imagemNome, cadenciaMin, cadenciaMax, grupoEsperado }) {
   if (!location.pathname.includes('/groups/')) {
     return { ok: false, retentavel: true, erro: 'A aba atual não é uma página de grupo do Facebook.' };
   }
@@ -578,12 +589,12 @@ async function publicar({ texto, imagemDados, imagemTipo, imagemNome, cadenciaMi
 
   let botao = null;
 
-  if (imagemDados) {
+  if (imagemBase64) {
     reportarStatus('anexando_imagem', 'Anexando imagem à nova postagem.');
-    const anexo = await anexarImagem(imagemDados, imagemTipo, imagemNome);
+    const anexo = await anexarImagem(base64ParaBytes(imagemBase64), imagemTipo, imagemNome);
     if (!anexo.ok) {
       if (anexo.erroInjecao) {
-        return { ok: false, retentavel: true, erro: 'Não foi possível anexar a imagem ao compositor do Facebook. Isso acontece porque o navegador bloqueia a injeção automática de arquivos por segurança. Tente publicar sem imagem ou entre em contato com o suporte pelo WhatsApp.' };
+        return { ok: false, retentavel: true, erro: 'Não foi possível anexar a imagem ao compositor do Facebook. Nenhuma publicação foi enviada; o grupo pode ser tentado novamente. Se o erro continuar, publique sem imagem ou fale com o suporte pelo WhatsApp.' };
       }
       return { ok: false, retentavel: true, erro: 'Não consegui selecionar a imagem no compositor. Confira o arquivo e tente novamente; nenhuma publicação foi enviada.' };
     }
