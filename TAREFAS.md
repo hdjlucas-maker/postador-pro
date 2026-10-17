@@ -13,9 +13,9 @@ Atualizada em 17/10/2026.
 - [x] Publicação em vários grupos: corrigida a falha aleatória "Não consegui ativar a publicação nesta página" que derrubava grupos da campanha (a injeção do script acontecia durante o redirecionamento do Facebook). Agora espera a página final do grupo ficar estável, tenta a injeção de novo e avisa em caso de login/verificação; regressão travada por teste novo (zip v1.0.50).
 - [x] "Usar novamente" revisado e aprovado pelo usuário em campanha real (17/10/2026); comportamento atual permanece, sem mudanças.
 - [x] Painel admin: login no navegador corrigido. O `comum.js` criava funções globais (`function chamar`...) e o `admin.js`/`instalar.js` morriam com "Identifier 'chamar' has already been declared" — o clique em Entrar recarregava a página e limpava os campos, sem erro visível (a landing também ficava sem os planos). O `comum.js` agora é encapsulado, o `instalar.js` tolera elemento ausente, o e-mail volta ao topo do painel e o `#dias-avaliacao` voltou à landing; coberto pelo teste novo `tests/paginas-publicas.test.mjs`.
+- [x] Login do painel admin confirmado pelo usuário em produção (17/10/2026). No mesmo dia: contas admin agora aparecem como "Permanente" na coluna Expira (sem botão de renovar 30 dias) e contam como Pro/ativas nos cartões; usuário expirado mostra a data em que o acesso venceu em vez de um traço. Nada disso muda o servidor, que já tratava admin como permanente.
 
 ## Pendente
-- [ ] Confirmar o login do painel admin no seu navegador (recarregue com Ctrl+F5 por causa do cache).
 - [ ] Testar a janela "Avaliar ferramenta" da extensão (nota 4-5 publica direto; 1-3 espera aprovação no painel).
 - [ ] Substituir as avaliações de exemplo por avaliações reais (ou apagar pelo painel).
 - [ ] Testar o pagamento real na InfinitePay ponta a ponta (checkout -> webhook -> liberação). É o último teste combinado.

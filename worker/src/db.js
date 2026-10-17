@@ -270,11 +270,13 @@ async function users_excluir(env, userId) {
 
 function users_estaEmDia(env) {
   const agora = AGORA();
+  // Administrador nunca expira: conta como Pro e como ativo para os cartões
+  // do painel baterem com a tabela (onde ele aparece como Pro).
   return env.DB.prepare(
     `SELECT
        COUNT(*) AS total,
-       SUM(CASE WHEN (plano = 'pro' AND data_expiracao > ?) OR trial_fim > ? THEN 1 ELSE 0 END) AS ativos,
-       SUM(CASE WHEN plano = 'pro' THEN 1 ELSE 0 END) AS pro,
+       SUM(CASE WHEN admin = 1 OR (plano = 'pro' AND data_expiracao > ?) OR trial_fim > ? THEN 1 ELSE 0 END) AS ativos,
+       SUM(CASE WHEN admin = 1 OR plano = 'pro' THEN 1 ELSE 0 END) AS pro,
        SUM(CASE WHEN plano = 'trial' THEN 1 ELSE 0 END) AS trial,
        SUM(CASE WHEN bloqueado = 1 THEN 1 ELSE 0 END) AS bloqueados
      FROM users`

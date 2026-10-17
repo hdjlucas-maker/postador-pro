@@ -495,6 +495,10 @@ describe('API do Postador Pro sobre Workers + D1', () => {
 
     expect(painel.status).toBe(200);
     expect(dados.usuarios.total).toBeGreaterThan(0);
+    // Administrador nunca expira: conta como Pro e ativo nos cartões do
+    // painel, igual à tabela de usuários.
+    expect(dados.usuarios.pro).toBeGreaterThanOrEqual(1);
+    expect(dados.usuarios.ativos).toBeGreaterThanOrEqual(1);
     expect(typeof dados.pagamentos.total).toBe('number');
     expect(typeof dados.avaliacoes.pendentes).toBe('number');
   });

@@ -85,14 +85,23 @@ async function carregarUsuarios() {
     ? lista
         .map(user => {
           const rotulo = user.status === 'pro' ? 'pro' : user.status === 'trial' ? 'trial' : 'expirado';
-          const dataExpira = user.status === 'trial' ? user.trialFim : user.dataExpiracao;
+          // A data mostrada é a do vencimento que vale para a conta: plano
+          // pago vence em dataExpiracao; avaliação vence em trialFim (inclusive
+          // quando já venceu, para não ficar um traço sem informação).
+          const dataExpira = user.dataExpiracao || user.trialFim;
+          // Administrador nunca expira: mostra "Permanente" e não oferece a
+          // renovação de 30 dias (o botão só faz sentido para quem vence).
+          const expira = user.admin ? 'Permanente' : data(dataExpira);
+          const acoes = [];
+          if (!user.admin) acoes.push(`<button class="botao secundario" type="button" data-reiniciar="${user.id}" style="padding:5px 11px;font-size:13px">Renovar 30 dias</button>`);
+          acoes.push(`<button class="botao secundario" type="button" data-reset="${user.id}" style="padding:5px 11px;font-size:13px">Gerar senha</button>`);
           return `<tr>
             <td>${escapar(user.email)}${user.admin ? ' <span class="etiqueta pro">admin</span>' : ''}${user.bloqueado ? ' <span class="etiqueta expirado">bloqueado</span>' : ''}</td>
             <td>${escapar(user.nome || '—')}</td>
             <td>${etiqueta(rotulo)}</td>
-            <td>${data(dataExpira)}</td>
+            <td>${expira}</td>
             <td>${data(user.criadoEm)}</td>
-            <td><button class="botao secundario" type="button" data-reiniciar="${user.id}" style="padding:5px 11px;font-size:13px">Renovar 30 dias</button> <button class="botao secundario" type="button" data-reset="${user.id}" style="padding:5px 11px;font-size:13px">Gerar senha</button></td>
+            <td>${acoes.join(' ')}</td>
           </tr>`;
         })
         .join('')
