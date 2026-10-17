@@ -664,6 +664,69 @@ async function publicacoes_incrementarHoje(env, userId, data, limite) {
   return { ok, contador, hoje };
 }
 
+/* -------------------------------------------------------------- avaliações */
+
+function linhaParaAvaliacao(row) {
+  if (!row) return null;
+  return {
+    _id: row.id,
+    userId: row.user_id,
+    nome: row.nome,
+    nota: Number(row.nota),
+    comentario: row.comentario,
+    aprovada: entidade(row.aprovada),
+    criadoEm: row.criado_em
+  };
+}
+
+/**
+ * Avaliações aprovadas para a janela "Avaliar ferramenta": as mais recentes
+ * primeiro, com a média e o total de todas as aprovadas.
+ */
+async function avaliacoes_resumo(env) {
+  const linhas = await env.DB.prepare(
+    'SELECT * FROM avaliacoes WHERE aprovada = 1 ORDER BY criado_em DESC LIMIT 12'
+  ).all();
+  const totais = await env.DB.prepare(
+    'SELECT COUNT(*) AS total, AVG(nota) AS media FROM avaliacoes WHERE aprovada = 1'
+  ).first();
+  return {
+    avaliacoes: (linhas.results || []).map(linhaParaAvaliacao),
+    total: Number(totais?.total || 0),
+    media: totais?.media == null ? null : Math.round(Number(totais.media) * 10) / 10
+  };
+}
+
+/**
+ * Uma avaliação por conta: reenviar atualiza a existente e a devolve para a
+ * fila de revisão (`aprovada = 0`), em vez de acumular linhas repetidas.
+ */
+async function avaliacoes_salvar(env, { userId, nome, nota, comentario }) {
+  const existente = await env.DB.prepare(
+    'SELECT id FROM avaliacoes WHERE user_id = ? LIMIT 1'
+  )
+    .bind(userId)
+    .first();
+
+  const quando = AGORA();
+  if (existente) {
+    await env.DB.prepare(
+      'UPDATE avaliacoes SET nome = ?, nota = ?, comentario = ?, aprovada = 0, criado_em = ? WHERE id = ?'
+    )
+      .bind(nome, nota, comentario, quando, existente.id)
+      .run();
+    return { _id: existente.id, atualizada: true };
+  }
+
+  const novoId = id();
+  await env.DB.prepare(
+    'INSERT INTO avaliacoes (id, user_id, nome, nota, comentario, aprovada, criado_em) VALUES (?, ?, ?, ?, ?, 0, ?)'
+  )
+    .bind(novoId, userId, nome, nota, comentario, quando)
+    .run();
+  return { _id: novoId, atualizada: false };
+}
+
 /* ----------------------------------------------------------------- resets */
 
 function linhaParaReset(row) {
@@ -856,6 +919,9 @@ export {
 
   publicacoes_contarHoje,
   publicacoes_incrementarHoje,
+
+  avaliacoes_resumo,
+  avaliacoes_salvar,
 
   resets_inserir,
   resets_porTokenHash,

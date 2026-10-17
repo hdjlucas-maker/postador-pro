@@ -176,6 +176,44 @@ function criar() {
     });
   });
 
+  // Avaliações exibidas na janela "Avaliar ferramenta". Público de propósito:
+  // quem ainda não entrou também vê o que os clientes estão dizendo. Só as
+  // aprovadas aparecem; o envio de um cliente entra como não aprovada.
+  app.get('/avaliacoes', security.limiteD1('avaliacoes', { max: 120 }), async c => {
+    const resumo = await db.avaliacoes_resumo(c.env);
+    return c.json({
+      media: resumo.media,
+      total: resumo.total,
+      avaliacoes: resumo.avaliacoes.map(a => ({
+        nome: a.nome,
+        nota: a.nota,
+        comentario: a.comentario,
+        criadoEm: a.criadoEm
+      }))
+    });
+  });
+
+  // Envio exige conta (Bearer). O nome exibido é só o primeiro nome da conta,
+  // por privacidade, e uma avaliação por conta: reenviar atualiza a anterior e
+  // volta para a fila de revisão.
+  app.post('/avaliacao', auth.exigirToken(), security.limiteD1('avaliacao', { max: 5, chave: porConta }), async c => {
+    const env = c.env;
+    const user = c.get('user');
+    const corpo = await c.req.json().catch(() => ({}));
+
+    const nota = Math.round(Number(corpo.nota));
+    if (!Number.isInteger(nota) || nota < 1 || nota > 5) {
+      return c.json({ erro: 'Escolha uma nota de 1 a 5.' }, 400);
+    }
+
+    const comentario = String(corpo.comentario || '').trim().slice(0, 500);
+    const nome = String(user.nome || '').trim().split(/\s+/)[0] || 'Cliente';
+
+    await db.avaliacoes_salvar(env, { userId: user._id, nome, nota, comentario });
+    log.info('avaliacao_registrada', { userId: user._id, nota });
+    return c.json({ ok: true });
+  });
+
   return app;
 }
 

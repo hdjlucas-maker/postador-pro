@@ -262,6 +262,69 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect((await licenca.json()).acesso).toEqual({ permitido: false, status: 'expirado' });
   });
 
+  it('lista as avaliações aprovadas para a janela Avaliar ferramenta', async () => {
+    const resposta = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', {
+      headers: { Origin: ORIGEM }
+    });
+    const dados = await resposta.json();
+
+    expect(resposta.status).toBe(200);
+    expect(dados.total).toBeGreaterThanOrEqual(4);
+    expect(dados.media).toBeGreaterThanOrEqual(4);
+    expect(dados.avaliacoes.length).toBeGreaterThanOrEqual(4);
+    expect(dados.avaliacoes[0]).toHaveProperty('nome');
+    expect(typeof dados.avaliacoes[0].nota).toBe('number');
+  });
+
+  it('aceita avaliação de cliente e só exibe depois da revisão', async () => {
+    const email = novoEmail();
+    const cadastro = await post('/api/extensao/cadastro', {
+      nome: 'Iris Campos', email, senha: 'senha-super-segura'
+    }, { Origin: ORIGEM });
+    const { token } = await cadastro.json();
+
+    const semToken = await SELF.fetch('https://api.postador.test/api/extensao/avaliacao', {
+      method: 'POST',
+      headers: { Origin: ORIGEM, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nota: 5 })
+    });
+    expect(semToken.status).toBe(401);
+
+    const notaInvalida = await SELF.fetch('https://api.postador.test/api/extensao/avaliacao', {
+      method: 'POST',
+      headers: { Origin: ORIGEM, 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nota: 9 })
+    });
+    expect(notaInvalida.status).toBe(400);
+
+    const envio = await SELF.fetch('https://api.postador.test/api/extensao/avaliacao', {
+      method: 'POST',
+      headers: { Origin: ORIGEM, 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nota: 5, comentario: 'O agendamento deixou minha rotina mais leve.' })
+    });
+    expect(envio.status).toBe(200);
+    expect((await envio.json()).ok).toBe(true);
+
+    // Guarda o primeiro nome da conta, por privacidade, e entra pendente.
+    const linha = await env.DB.prepare(
+      'SELECT nome, aprovada FROM avaliacoes WHERE user_id = (SELECT id FROM users WHERE email = ?)'
+    ).bind(email).first();
+    expect(linha.nome).toBe('Iris');
+    expect(Number(linha.aprovada)).toBe(0);
+
+    // Enquanto não é aprovada, não aparece na listagem pública.
+    const antes = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', { headers: { Origin: ORIGEM } });
+    const comentario = 'O agendamento deixou minha rotina mais leve.';
+    expect((await antes.json()).avaliacoes.some(a => a.comentario === comentario)).toBe(false);
+
+    // Aprovar é o que o administrador faz pelo banco; aí entra na listagem.
+    await env.DB.prepare('UPDATE avaliacoes SET aprovada = 1 WHERE user_id = (SELECT id FROM users WHERE email = ?)')
+      .bind(email)
+      .run();
+    const depois = await SELF.fetch('https://api.postador.test/api/extensao/avaliacoes', { headers: { Origin: ORIGEM } });
+    expect((await depois.json()).avaliacoes.some(a => a.comentario === comentario)).toBe(true);
+  });
+
   it('recusa extensão fora da allowlist', async () => {
     const email = novoEmail();
     await post('/api/register', { nome: 'Gabi Rocha', email, senha: 'senha-super-segura' });

@@ -148,4 +148,11 @@ $('botao-campanhas').addEventListener('click', () => {
 // Ao abrir o popup, mostra o estado atual.
 atualizarTelaPrincipal();
 
-$('botao-feedback').addEventListener('click', () => { chrome.tabs.create({ url: `${CONFIG.API_BASE}/?origem=extensao#avaliar` }); });
+// A versão do cabeçalho vem do manifesto; antes era um texto fixo no HTML e
+// ficava desatualizado a cada versão publicada.
+$('versao').textContent = `v${chrome.runtime.getManifest().version}`;
+
+// Avaliar abre a janela própria da extensão, sem sair da página atual.
+$('botao-feedback').addEventListener('click', () => {
+  chrome.windows.create({ url: chrome.runtime.getURL('avaliar/avaliar.html'), type: 'popup', width: 480, height: 680 });
+});

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" sizes="128x128" href="../icons/icon128.png">
+  <title>Avaliar ferramenta - Postador Pro</title>
+  <link rel="stylesheet" href="avaliar.css">
+</head>
+<body>
+  <header class="cabecalho-marca">
+    <div class="marca-completa"><img src="../icons/icon48.png" alt="" class="logo-pequena"><div><h1>Postador Pro</h1><span class="subtitulo-marca">Sua opinião melhora a ferramenta</span></div></div>
+  </header>
+
+  <main>
+    <section id="bloco-form" class="bloco">
+      <p class="rotulo">Que nota você dá para o Postador Pro?</p>
+      <div id="estrelas" class="estrelas" role="radiogroup" aria-label="Nota de 1 a 5">
+        <button type="button" class="estrela" data-nota="1" aria-label="Nota 1 de 5">★</button>
+        <button type="button" class="estrela" data-nota="2" aria-label="Nota 2 de 5">★</button>
+        <button type="button" class="estrela" data-nota="3" aria-label="Nota 3 de 5">★</button>
+        <button type="button" class="estrela" data-nota="4" aria-label="Nota 4 de 5">★</button>
+        <button type="button" class="estrela" data-nota="5" aria-label="Nota 5 de 5">★</button>
+      </div>
+      <label for="campo-comentario">Quer contar o que está achando? (opcional)</label>
+      <textarea id="campo-comentario" rows="3" maxlength="500" placeholder="O agendamento ajuda? A publicação tem funcionado bem?"></textarea>
+      <p id="status-avaliar" class="suave" role="status"></p>
+      <div class="acoes">
+        <button type="button" id="botao-enviar" class="botao">Enviar avaliação</button>
+        <button type="button" id="botao-fechar-form" class="botao secundario">Fechar</button>
+      </div>
+    </section>
+
+    <section id="bloco-obrigado" class="bloco oculta">
+      <p class="obrigado">Obrigado pela avaliação!</p>
+      <p id="texto-obrigado" class="suave"></p>
+      <button type="button" id="botao-fechar" class="botao">Fechar</button>
+    </section>
+
+    <section class="bloco">
+      <div class="linha-titulo">
+        <h2>O que estão dizendo</h2>
+        <span id="resumo-notas" class="suave"></span>
+      </div>
+      <p id="carregando-avaliacoes" class="suave">Carregando avaliações...</p>
+      <ul id="lista-avaliacoes" class="lista"></ul>
+    </section>
+  </main>
+
+  <script src="avaliar.js" type="module"></script>
+</body>
+</html>

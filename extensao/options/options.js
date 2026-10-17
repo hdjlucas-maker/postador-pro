@@ -359,7 +359,10 @@ async function reutilizarCampanha(id) {
 }
 $('botao-nova').addEventListener('click', () => abrirForm(true));
 $('atalho-nova').addEventListener('click', () => abrirForm(true));
-$('atalho-feedback').addEventListener('click', () => chrome.tabs.create({ url: `${CONFIG.API_BASE}/?origem=extensao#avaliar` }));
+// Avaliar abre a janela própria da extensão, sem sair da página atual.
+$('atalho-feedback').addEventListener('click', () => {
+  chrome.windows.create({ url: chrome.runtime.getURL('avaliar/avaliar.html'), type: 'popup', width: 480, height: 680 });
+});
 document.querySelectorAll('[data-emoji]').forEach(botao => {
   botao.addEventListener('click', () => {
     const campo = mensagemEmFoco || obterCamposMensagens()[0];

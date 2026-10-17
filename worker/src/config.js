@@ -110,7 +110,9 @@ function carregarConfig(env) {
       extensaoLogin: 15 * 60 * 1000,
       extensaoCadastro: 60 * 60 * 1000,
       checkout: 60 * 60 * 1000,
-      reconciliar: 60 * 60 * 1000
+      reconciliar: 60 * 60 * 1000,
+      avaliacoes: 15 * 60 * 1000,
+      avaliacao: 60 * 60 * 1000
     }
   };
 

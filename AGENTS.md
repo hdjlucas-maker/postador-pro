@@ -9,7 +9,7 @@ Extensão de navegador (Chrome, Manifest V3) que publica campanhas em grupos do 
 | `npm test` | 11 testes da extensão (validação de campos, Spintax, seleção do compositor no DOM simulado e transporte da imagem em base64). |
 | `npm run verificar:extensao` | Confere manifesto, permissões, `key`, arquivos citados, sintaxe de todos os `.js`, referências dos HTML e elementos do DOM usados no JS. Não gera nada. |
 | `npm run empacotar` | Verifica e gera `public/downloads/postador-pro.zip`. |
-| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (23 testes da API, vitest + pool do Workers). |
+| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (25 testes da API, vitest + pool do Workers). |
 
 ## Ordem quando mexer na extensão
 
@@ -24,7 +24,7 @@ Sem isso, o cliente baixa uma versão antiga do zip (já aconteceu). Não versio
 
 - Um teste só: `node tests/<arquivo>.test.mjs` na raiz (usa `node:test` built-in).
 - Extensão: `npm test`.
-- Worker: `cd worker && npm install && npm test` (vitest run, atualmente 23 testes).
+- Worker: `cd worker && npm install && npm test` (vitest run, atualmente 25 testes).
 - Antes de mudar algo: `npm test` e `npm run verificar:extensao` devem passar.
 - Os testes da extensão usam DOM simulado. Publicação real em grupo do Facebook **não está verificada**; se o Facebook mudar o DOM, revisar seletores em `extensao/content/facebook.js`.
 - Pagamento real com InfinitePay e envio de e-mail também não estão verificados.
@@ -51,6 +51,8 @@ O cookie `SameSite` não atravessa `chrome-extension://`, então a extensão usa
 - `GET /api/extensao/licenca` `Authorization: Bearer <token>`
 - `POST /api/extensao/checkout`, `/reconciliar`, `/sair` `Authorization: Bearer <token>`
 - `GET /api/extensao/planos` — público (preços e limites)
+- `GET /api/extensao/avaliacoes` — público (só as aprovadas, exibidas na janela "Avaliar ferramenta")
+- `POST /api/extensao/avaliacao` `{nota, comentario}` `Authorization: Bearer <token>`
 
 `EXTENSAO_IDS` (em `worker/wrangler.jsonc`) lista os IDs liberados. Somente `chrome-extension://<ID>` da lista passa na verificação de origem e recebe CORS. Não adicionar `*.workers.dev` nem `<all_urls>` a `host_permissions` do manifest — `npm run verificar:extensao` barra isso.
 
@@ -105,6 +107,7 @@ Mudar `TRIAL_DAYS` exige editar `worker/wrangler.jsonc` e fazer `wrangler deploy
 - `DIRETRIZES.md` no GitHub é uma versão antiga; este arquivo só chega a outras IAs se for commitado de propósito.
 - Rate limit de edge (`RL_GERAL`, `RL_WEBHOOK`) está **desligado** no `wrangler.jsonc` enquanto o Wrangler recusar o campo `ratelimits`. Até lá, o rate limit roda no D1 (tabela `rate_limits` + `security.limiteD1` nas rotas, incluindo `/publicacao`).
 - **Imagem: o transporte é base64.** O canal de mensagens do Chrome (`chrome.tabs.sendMessage`) só transporta JSON: ArrayBuffer/Blob chegam vazios do outro lado — era isso que causava o "Não é possível ler arquivo" do Facebook, e não bloqueio do navegador. O service worker converte os bytes para base64 (`bytesParaBase64`), o content script remonta o arquivo real (`base64ParaBytes` + `new File`) e injeta no compositor via `DataTransfer`. **Não voltar a enviar bytes crus por `sendMessage`.** O teste `imagem: base64 chega íntegro...` em `tests/facebook-content.test.mjs` trava essa regressão.
+- **Avaliar ferramenta:** o popup e as opções abrem `extensao/avaliar/avaliar.html` em janela própria (`chrome.windows.create`), sem sair da página. O envio de um cliente entra com `aprovada = 0`; só `aprovada = 1` aparece na listagem pública. A migração `0003` traz avaliações de exemplo (substituir/apagar quando houver reais); aprovar é `UPDATE avaliacoes SET aprovada = 1` no D1. Uma avaliação por conta: reenviar atualiza a anterior e volta para a fila de revisão.
 - Recuperação de senha por e-mail **não funciona em produção sem domínio próprio**: precisa de `npx wrangler email sending enable SEUDOMINIO`, binding `EMAIL` no `wrangler.jsonc`, `EMAIL_FROM` nas vars e `wrangler deploy`. Sem isso, o link vai só para o log e o admin redefini a senha pelo painel.
 - O botão "Agendar campanha" foi removido do rodapé do formulário. O agendamento se faz pelo checkbox "Agendar publicação": marcado, o botão principal vira "AGENDAR PUBLICAÇÃO" e salva para o horário escolhido; desmarcado, continua "INICIAR PUBLICAÇÃO" e publica na hora.
 - Um `$('id')` no `options.js`/`popup.js` apontando para elemento inexistente no HTML correspondente quebra a interface inteira (a tela fica só em "Verificando…"). O `npm run verificar:extensao` agora detecta isso e barra o empacotamento.
