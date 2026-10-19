@@ -57,12 +57,16 @@ function carregarConfig(env) {
       trial: {
         gruposPorDia: Math.min(5, num(env.LIMIT_TRIAL_GRUPOS_DIA, 5)),
         campanhasAtivas: num(env.LIMIT_TRIAL_CAMPANHAS, 3),
-        destinosPorCampanha: num(env.LIMIT_TRIAL_DESTINOS, 5)
+        destinosPorCampanha: num(env.LIMIT_TRIAL_DESTINOS, 5),
+        // Cota diária do gerador de textos com IA: a avaliação tem menos e o
+        // plano pago libera mais (o administrador conta como Pro).
+        iaGeracoesDia: num(env.LIMIT_TRIAL_IA_GERACOES, 3)
       },
       pro: {
         gruposPorDia: Math.min(10, num(env.LIMIT_PRO_GRUPOS_DIA, 10)),
         campanhasAtivas: num(env.LIMIT_PRO_CAMPANHAS, 50),
-        destinosPorCampanha: num(env.LIMIT_PRO_DESTINOS, 100)
+        destinosPorCampanha: num(env.LIMIT_PRO_DESTINOS, 100),
+        iaGeracoesDia: num(env.LIMIT_PRO_IA_GERACOES, 10)
       }
     },
 
@@ -102,8 +106,7 @@ function carregarConfig(env) {
       trocaSenha: num(env.RATE_LIMIT_TROCA_SENHA, 10),
       recuperar: num(env.RATE_LIMIT_RECUPERAR, 5),
       redefinir: num(env.RATE_LIMIT_REDEFINIR, 10),
-      excluirConta: num(env.RATE_LIMIT_EXCLUIR_CONTA, 5),
-      gerarTextos: num(env.RATE_LIMIT_GERAR_TEXTOS, 10)
+      excluirConta: num(env.RATE_LIMIT_EXCLUIR_CONTA, 5)
     },
 
     JANELAS_RATE_LIMIT: {

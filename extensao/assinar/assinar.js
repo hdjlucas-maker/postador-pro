@@ -57,7 +57,8 @@ async function pintarLicenca() {
     }
 
     if (lic.limites) {
-      $('detalhes-assinatura').textContent = `Limites do plano: ${lic.limites.gruposPorDia} grupos por dia, ${lic.limites.campanhasAtivas} campanhas ativas e ${lic.limites.destinosPorCampanha} destinos por campanha.`;
+      const ia = Number(lic.limites.iaGeracoesDia) ? ` Gerações de texto com IA: ${lic.limites.iaGeracoesDia} por dia.` : '';
+      $('detalhes-assinatura').textContent = `Limites do plano: ${lic.limites.gruposPorDia} grupos por dia, ${lic.limites.campanhasAtivas} campanhas ativas e ${lic.limites.destinosPorCampanha} destinos por campanha.${ia}`;
     }
     return true;
   } catch (_) {
@@ -68,7 +69,7 @@ async function pintarLicenca() {
   }
 }
 
-function criarCartaoPlano(plano) {
+function criarCartaoPlano(plano, limites) {
   const cartao = document.createElement('div');
   cartao.className = 'plano';
 
@@ -104,6 +105,16 @@ function criarCartaoPlano(plano) {
   suave.textContent = detalhe;
   cartao.appendChild(suave);
 
+  // Os dois planos são do Postador Pro: o cartão mostra a cota de IA do plano
+  // pago, que é maior que a da avaliação.
+  const iaPro = limites && limites.pro ? Number(limites.pro.iaGeracoesDia) : 0;
+  if (iaPro) {
+    const linhaIa = document.createElement('p');
+    linhaIa.className = 'suave';
+    linhaIa.textContent = `Inclui ${iaPro} gerações de texto com IA por dia.`;
+    cartao.appendChild(linhaIa);
+  }
+
   const botao = document.createElement('button');
   botao.type = 'button';
   botao.className = 'botao';
@@ -121,7 +132,7 @@ async function carregarPlanos() {
     lista.textContent = '';
 
     for (const plano of dados.planos || []) {
-      lista.appendChild(criarCartaoPlano(plano));
+      lista.appendChild(criarCartaoPlano(plano, dados.limites));
     }
 
     if (dados.pago === false) {

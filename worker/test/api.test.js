@@ -310,7 +310,7 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect(bloqueado.status).toBe(401);
   });
 
-  it('gerador de textos exige conta com acesso, valida o pedido e respeita a cota diária', async () => {
+  it('gerador de textos: avaliação tem cota menor e o plano pago libera mais', async () => {
     // Sem token a rota nem chega no rate limit.
     const semToken = await post('/api/extensao/gerar-textos', { produto: 'Curso de violão' }, { Origin: ORIGEM });
     expect(semToken.status).toBe(401);
@@ -322,20 +322,40 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     const { token } = await cadastro.json();
     const cabecalhos = { Origin: ORIGEM, Authorization: `Bearer ${token}` };
 
-    // O produto é obrigatório e a validação acontece antes de chamar a IA.
+    // A licença devolve a cota de IA do plano atual; é o que a extensão mostra
+    // no texto do formulário. No teste a avaliação tem 1 geração/dia.
+    const licencaTrial = await SELF.fetch(`${BASE}/api/extensao/licenca`, { headers: cabecalhos });
+    expect((await licencaTrial.json()).licenca.limites.iaGeracoesDia).toBe(1);
+
+    // O produto é obrigatório e a validação acontece antes de chamar a IA, mas
+    // cada tentativa autenticada já conta para a cota (como nas demais rotas
+    // com limite no D1): a primeira consome a única geração da avaliação.
     const semProduto = await post('/api/extensao/gerar-textos', { produto: '   ' }, cabecalhos);
     expect(semProduto.status).toBe(400);
     expect((await semProduto.json()).erro).toMatch(/produto ou serviço/i);
 
-    // Cada tentativa autenticada consome a cota (como nas demais rotas com
-    // limite no D1). A cota de teste é 2 por conta/24 h, definida em
-    // RATE_LIMIT_GERAR_TEXTOS no vitest.config.mjs.
-    const segunda = await post('/api/extensao/gerar-textos', { produto: '   ' }, cabecalhos);
-    expect(segunda.status).toBe(400);
+    // Segunda tentativa na avaliação: 429 com convite a assinar.
+    const estourouTrial = await post('/api/extensao/gerar-textos', { produto: 'Curso de violão' }, cabecalhos);
+    expect(estourouTrial.status).toBe(429);
+    expect((await estourouTrial.json()).erro).toMatch(/na avaliação.*Assine um plano/i);
 
-    const estourou = await post('/api/extensao/gerar-textos', { produto: 'Curso de violão' }, cabecalhos);
-    expect(estourou.status).toBe(429);
-    expect((await estourou.json()).erro).toMatch(/gerações de texto de hoje/);
+    // No plano pago a mesma conta gera mais: o contador do dia continua no D1,
+    // mas o teto vira o do Pro (3 no teste) e a licença muda sem novo login,
+    // porque o middleware relê a conta a cada chamada.
+    const usuario = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    await env.DB.prepare("UPDATE users SET plano = 'pro', data_expiracao = ? WHERE id = ?")
+      .bind(new Date(Date.now() + 30 * 86400000).toISOString(), usuario.id)
+      .run();
+
+    const licencaPro = await SELF.fetch(`${BASE}/api/extensao/licenca`, { headers: cabecalhos });
+    expect((await licencaPro.json()).licenca.limites.iaGeracoesDia).toBe(3);
+
+    const liberadoPeloPro = await post('/api/extensao/gerar-textos', { produto: '   ' }, cabecalhos);
+    expect(liberadoPeloPro.status).toBe(400); // terceira tentativa: no Pro passa, na avaliação não passaria
+
+    const estourouPro = await post('/api/extensao/gerar-textos', { produto: 'Curso de violão' }, cabecalhos);
+    expect(estourouPro.status).toBe(429);
+    expect((await estourouPro.json()).erro).toMatch(/Tente novamente amanhã/);
   });
 
   it('conta de administrador nunca expira: avaliação vencida continua valendo como Pro', async () => {

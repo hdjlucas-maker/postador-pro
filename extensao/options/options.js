@@ -292,7 +292,16 @@ async function abrirForm(nova) {
   $('campo-ia-link').value = '';
   $('campo-ia-tom').value = 'amigavel';
   $('campo-ia-objetivo').value = 'link';
-  $('ia-status').textContent = 'Até 10 gerações por conta por dia. Não inclua dados pessoais.';
+  // A cota de IA vem do servidor conforme o plano: avaliação gera menos, Pro
+  // gera mais. Sem licença carregada, cai no texto genérico.
+  const estadoForm = await armazenamento.carregarEstado();
+  const iaDia = Number(estadoForm?.licenca?.limites?.iaGeracoesDia) || 0;
+  const contaPro = estadoForm?.acesso?.status === 'pro';
+  $('ia-status').textContent = !iaDia
+    ? 'Gerações de texto com IA conforme o seu plano. Não inclua dados pessoais.'
+    : contaPro
+      ? `Até ${iaDia} gerações de texto por dia no seu plano. Não inclua dados pessoais.`
+      : `Até ${iaDia} gerações de texto por dia na avaliação — assine o Pro para liberar mais. Não inclua dados pessoais.`;
   if (nova) {
     campanhaEditando = null;
     $('campo-nome').value = '';

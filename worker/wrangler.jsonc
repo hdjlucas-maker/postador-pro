@@ -43,7 +43,8 @@
 
   // IA da Cloudflare (Workers AI) para o "Gerar 3 variações" da extensão.
   // Não exige chave externa nem cartão: a conta tem cota diária gratuita de
-  // neurônios. O modelo e a cota por conta ficam nas vars abaixo.
+  // neurônios. O modelo fica em `IA_MODEL` e as cotas por plano em
+  // `LIMIT_TRIAL_IA_GERACOES` / `LIMIT_PRO_IA_GERACOES`.
   "ai": {
     "binding": "AI"
   },
@@ -107,10 +108,13 @@
     // Gerador de textos com IA (Workers AI). O modelo pode ser trocado aqui
     // sem mexer no código; vazio usa o padrão de `src/ia.js`.
     "IA_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    "RATE_LIMIT_GERAR_TEXTOS": "10",
     "LIMIT_TRIAL_GRUPOS_DIA": "5",
     "LIMIT_TRIAL_CAMPANHAS": "3",
     "LIMIT_TRIAL_DESTINOS": "5",
+    // Gerações diárias do gerador de textos com IA: menos na avaliação, mais
+    // no plano pago (e o administrador conta como Pro).
+    "LIMIT_TRIAL_IA_GERACOES": "3",
+    "LIMIT_PRO_IA_GERACOES": "10",
     "LIMIT_PRO_GRUPOS_DIA": "10",
     "LIMIT_PRO_CAMPANHAS": "50",
     "LIMIT_PRO_DESTINOS": "100",

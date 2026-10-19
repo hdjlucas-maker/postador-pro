@@ -283,7 +283,10 @@ async function limiteGeral(c) {
 function limiteD1(nome, { max, janelaMs, chave, mensagem } = {}) {
   return async function limit(c, next) {
     const cfg = configMod.config(c.env);
-    const limite = max ?? cfg.RATE_LIMITS[nome] ?? 10;
+    // `max` também aceita função: rotas com cota por plano (o gerador de
+    // textos com IA, por exemplo) calculam o teto a partir da conta da
+    // requisição, e o mesmo vale para a mensagem do 429.
+    const limite = typeof max === 'function' ? max(c) : (max ?? cfg.RATE_LIMITS[nome] ?? 10);
     const janela = janelaMs ?? cfg.JANELAS_RATE_LIMIT[nome] ?? 15 * 60 * 1000;
     const identificador = chave ? chave(c) : clientIp(c);
 
@@ -292,7 +295,8 @@ function limiteD1(nome, { max, janelaMs, chave, mensagem } = {}) {
       if (!resultado.permitido) {
         c.header('Retry-After', String(Math.max(1, Math.ceil(resultado.expiraEm - Date.now() / 1000))));
         log.warn('rate_limit', { limite: nome, path: new URL(c.req.url).pathname });
-        return c.json({ erro: mensagem || 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' }, 429);
+        const textoErro = typeof mensagem === 'function' ? mensagem(c) : mensagem;
+        return c.json({ erro: textoErro || 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' }, 429);
       }
     } catch (erro) {
       log.error('rate_limit_indisponivel', { limite: nome, erro: erro.message });

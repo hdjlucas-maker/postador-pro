@@ -44,7 +44,9 @@ function resumoLicenca(env, user) {
     limites: {
       gruposPorDia: limites.gruposPorDia,
       campanhasAtivas: limites.campanhasAtivas,
-      destinosPorCampanha: limites.destinosPorCampanha
+      destinosPorCampanha: limites.destinosPorCampanha,
+      // A extensão mostra a cota certa do gerador de IA conforme o plano.
+      iaGeracoesDia: limites.iaGeracoesDia
     }
   };
 }
@@ -188,11 +190,15 @@ function criar() {
   });
 
   // Gera três variações de mensagem com a IA da Cloudflare (binding `AI`).
-  // A conta precisa ter acesso válido (a avaliação conta) e a cota fica no D1:
-  // 10 gerações por conta a cada 24 h por padrão (`RATE_LIMIT_GERAR_TEXTOS`).
+  // A conta precisa ter acesso válido (a avaliação conta) e a cota por plano
+  // fica no D1, por conta e a cada 24 h: menos gerações na avaliação
+  // (`LIMIT_TRIAL_IA_GERACOES`) e mais no Pro (`LIMIT_PRO_IA_GERACOES`).
   app.post('/gerar-textos', auth.exigirTokenComAcesso(), security.limiteD1('gerarTextos', {
     chave: porConta,
-    mensagem: 'Você já usou as gerações de texto de hoje. Tente novamente amanhã ou escreva as mensagens manualmente.'
+    max: c => auth.limitesDoPlano(c.env, c.get('user')).iaGeracoesDia,
+    mensagem: c => c.get('acesso').status === 'pro'
+      ? 'Você já usou as gerações de texto de hoje. Tente novamente amanhã ou escreva as mensagens manualmente.'
+      : 'Você já usou as gerações de texto de hoje na avaliação. Assine um plano para liberar mais gerações.'
   }), async c => {
     const body = await c.req.json().catch(() => ({}));
 

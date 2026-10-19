@@ -57,7 +57,7 @@ O cookie `SameSite` não atravessa `chrome-extension://`, então a extensão usa
 - `GET /api/extensao/planos` — público (preços e limites)
 - `GET /api/extensao/avaliacoes` — público (só as aprovadas, exibidas na janela "Avaliar ferramenta")
 - `POST /api/extensao/avaliacao` `{nota, comentario}` `Authorization: Bearer <token>`
-- `POST /api/extensao/gerar-textos` `{produto, beneficios, publico, link, tom, objetivo}` `Authorization: Bearer <token>` — gera 3 variações com o Workers AI (binding `AI`); cota `RATE_LIMIT_GERAR_TEXTOS` (10) por conta a cada 24 h; sem binding responde 503
+- `POST /api/extensao/gerar-textos` `{produto, beneficios, publico, link, tom, objetivo}` `Authorization: Bearer <token>` — gera 3 variações com o Workers AI (binding `AI`); cota por plano, por conta e a cada 24 h (3/dia na avaliação, 10/dia no Pro — `LIMIT_TRIAL_IA_GERACOES`/`LIMIT_PRO_IA_GERACOES`), com 429 convidando a assinar na avaliação; sem binding responde 503
 
 `EXTENSAO_IDS` (em `worker/wrangler.jsonc`) lista os IDs liberados. Hoje são dois: `aaegnkekaabiomfkpmpbhodliomgkdna` (instalação manual, zip do site) e `bcgeojfhaipebhjfadchndghefmkmjca` (Item ID da Chrome Web Store, rascunho criado em 17/10/2026). Somente `chrome-extension://<ID>` da lista passa na verificação de origem e recebe CORS. Não adicionar `*.workers.dev` nem `<all_urls>` a `host_permissions` do manifest — `npm run verificar:extensao` barra isso.
 
@@ -85,12 +85,14 @@ O cookie `SameSite` não atravessa `chrome-extension://`, então a extensão usa
 
 ## Planos e limites (vêm de `wrangler.jsonc`)
 
-- Avaliação: `TRIAL_DAYS` (hoje **7 dias**), 5 grupos/dia, 3 campanhas ativas, 5 destinos por campanha.
-- Pro: 10 grupos/dia, 50 campanhas ativas, 100 destinos por campanha.
+- Avaliação: `TRIAL_DAYS` (hoje **7 dias**), 5 grupos/dia, 3 campanhas ativas, 5 destinos por campanha, 3 gerações de texto com IA/dia.
+- Pro: 10 grupos/dia, 50 campanhas ativas, 100 destinos por campanha, 10 gerações de texto com IA/dia.
 - Delay padrão entre postagens: 600 a 1200 segundos, sorteado.
 - Mensal R$ 25,00; anual R$ 249,00.
 
 Mudar `TRIAL_DAYS` exige editar `worker/wrangler.jsonc` e fazer `wrangler deploy` para valer em produção. Contas já cadastradas mantêm a `trialFim` gravada; a alteração afeta novos cadastros e avaliações reiniciadas pelo admin.
+
+As gerações de IA ficam em `LIMIT_TRIAL_IA_GERACOES` (3) e `LIMIT_PRO_IA_GERACOES` (10); mudar exige editar `worker/wrangler.jsonc` e fazer deploy. A cota é por conta a cada 24 h, aplicada no D1 (`rate_limits`), e o teto é escolhido a cada requisição por `auth.limitesDoPlano` — por isso o admin (Pro) já gera com a cota do Pro.
 
 Contas de administrador (`ADMIN_EMAILS`: hoje `hdjlucas@gmail.com` e `aservicos17@gmail.com`) nunca expiram: `estadoDeAcesso` as trata como Pro permanente, com os limites do Pro, tanto na extensão quanto no painel.
 
@@ -113,7 +115,7 @@ Contas de administrador (`ADMIN_EMAILS`: hoje `hdjlucas@gmail.com` e `aservicos1
 - Manifest V3: o Chrome encerra o service worker por inatividade; `chrome.alarms` só dispara com o navegador aberto. Agendamento depende do navegador ficar aberto (documentado na interface e nos termos).
 - A extensão armazena campanhas, textos, grupos e histórico **no navegador do cliente**, não no servidor. O servidor guarda apenas a conta do cliente (e-mail, nome, hash da senha, plano, vencimento, histórico de pagamento) e agora também o **contador de publicações diárias** (tabela `publicacoes_dia` no D1).
 - `info.md` tem credenciais de administrador e é **local apenas**; nunca commitar nem incluir no zip público.
-- Botão "Gerar 3 variações" **ativo** (zip v1.0.54): a rota `POST /api/extensao/gerar-textos` usa a binding `AI` do Workers AI (sem chave externa, cota diária gratuita da Cloudflare). O modelo fica em `IA_MODEL` (`@cf/meta/llama-3.3-70b-instruct-fp8-fast` por padrão) e a cota por conta em `RATE_LIMIT_GERAR_TEXTOS` (10 a cada 24 h, no D1). Sem a binding, a rota responde 503 com aviso para escrever manualmente; a leitura da resposta tolera numeração/aspas e exige as três variações. Testes: `worker/test/ia.test.js` (parsing/pedido) e o caso de auth/validação/cota em `worker/test/api.test.js`.
+- Botão "Gerar 3 variações" **ativo** (zip v1.0.55): a rota `POST /api/extensao/gerar-textos` usa a binding `AI` do Workers AI (sem chave externa, cota diária gratuita da Cloudflare). O modelo fica em `IA_MODEL` (`@cf/meta/llama-3.3-70b-instruct-fp8-fast` por padrão) e a cota por plano em `LIMIT_TRIAL_IA_GERACOES` (3) e `LIMIT_PRO_IA_GERACOES` (10), por conta a cada 24 h no D1 — o 429 da avaliação convida a assinar, o do Pro manda tentar amanhã, e a extensão mostra a cota do plano no formulário e nos cartões da janela de assinatura; o administrador conta como Pro. Sem a binding, a rota responde 503 com aviso para escrever manualmente; a leitura da resposta tolera numeração/aspas e exige as três variações. Testes: `worker/test/ia.test.js` (parsing/pedido) e o caso de auth/validação/cotas (avaliação x Pro) em `worker/test/api.test.js`.
 - `DIRETRIZES.md` no GitHub é uma versão antiga; este arquivo só chega a outras IAs se for commitado de propósito.
 - Rate limit de edge (`RL_GERAL`, `RL_WEBHOOK`) está **desligado** no `wrangler.jsonc` enquanto o Wrangler recusar o campo `ratelimits`. Até lá, o rate limit roda no D1 (tabela `rate_limits` + `security.limiteD1` nas rotas, incluindo `/publicacao`).
 - **Imagem: o transporte é base64.** O canal de mensagens do Chrome (`chrome.tabs.sendMessage`) só transporta JSON: ArrayBuffer/Blob chegam vazios do outro lado — era isso que causava o "Não é possível ler arquivo" do Facebook, e não bloqueio do navegador. O service worker converte os bytes para base64 (`extensao/lib/imagem.js`), o content script remonta o arquivo real (`base64ParaBytes` + `new File`) e injeta no compositor via `DataTransfer`. **Não voltar a enviar bytes crus por `sendMessage`.** O teste `imagem: base64 chega íntegro...` em `tests/facebook-content.test.mjs` trava essa regressão.
