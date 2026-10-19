@@ -24,25 +24,71 @@ function abrirBanco() {
   });
 }
 
-async function imagemSalvar(id, blob) {
+async function imagemSalvar(id, dados) {
   const db = await abrirBanco();
+  // Os bytes ficam no próprio registro (ArrayBuffer). O formato antigo guardava
+  // um Blob, que o Chrome pode liberar separadamente do registro — a imagem
+  // "sumia" do armazenamento e a publicação falhava no meio da campanha.
+  const registro = {
+    id,
+    bytes: dados.bytes,
+    tipo: dados.tipo || '',
+    nome: dados.nome || '',
+    salvoEm: Date.now()
+  };
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_IMAGENS, 'readwrite');
-    tx.objectStore(STORE_IMAGENS).put({ id, blob, salvoEm: Date.now() });
+    tx.objectStore(STORE_IMAGENS).put(registro);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-async function imagemBuscar(id) {
+async function imagemLerRegistro(id) {
   const db = await abrirBanco();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_IMAGENS, 'readonly');
-    const req = tx.objectStore(STORE_IMAGENS).get(id);
-    req.onsuccess = () => resolve(req.result ? req.result.blob : null);
-    req.onerror = () => reject(req.error);
+    const pedido = tx.objectStore(STORE_IMAGENS).get(id);
+    pedido.onsuccess = () => resolve(pedido.result || null);
+    pedido.onerror = () => reject(pedido.error);
   });
 }
+
+async function imagemBuscarDados(id) {
+  const registro = await imagemLerRegistro(id).catch(() => null);
+  if (!registro) return null;
+
+  if (registro.bytes) {
+    return { bytes: registro.bytes, tipo: registro.tipo || '', nome: registro.nome || '' };
+  }
+
+  // Formato antigo ({ blob }): converte na primeira leitura para o formato
+  // durável. Se o Chrome já tiver liberado o blob, devolve null — é o caso que
+  // aparece como "a imagem selecionada não está mais disponível".
+  if (registro.blob && registro.blob.size) {
+    try {
+      const dados = {
+        bytes: await registro.blob.arrayBuffer(),
+        tipo: registro.blob.type || registro.tipo || '',
+        nome: registro.blob.name || registro.nome || ''
+      };
+      await imagemSalvar(id, dados).catch(() => {});
+      return dados;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function imagemBuscar(id) {
+  const dados = await imagemBuscarDados(id);
+  if (!dados || !dados.bytes || !dados.bytes.byteLength) return null;
+  // A prévia das telas continua recebendo um Blob; o envio usa os bytes.
+  return new Blob([dados.bytes], { type: dados.tipo || '' });
+}
+
 
 async function imagemApagar(id) {
   const db = await abrirBanco();
@@ -128,6 +174,7 @@ async function registrarPublicacao() {
 export {
   imagemSalvar as salvarImagem,
   imagemBuscar as buscarImagem,
+  imagemBuscarDados as buscarImagemDados,
   imagemApagar as apagarImagem,
   carregarEstado,
   salvarEstado,

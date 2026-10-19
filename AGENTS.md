@@ -6,11 +6,11 @@ Extensão de navegador (Chrome, Manifest V3) que publica campanhas em grupos do 
 
 | Comando | O que faz |
 |---|---|
-| `npm test` | 31 testes da extensão (validação de campos, Spintax, seleção do compositor no DOM simulado, transporte da imagem em base64 e segurança da licença/relógio). |
+| `npm test` | 36 testes da extensão (validação de campos, Spintax, seleção do compositor no DOM simulado, transporte da imagem em base64, preparo/validação da imagem e segurança da licença/relógio). |
 | `npm run verificar:extensao` | Confere manifesto, permissões, `key`, arquivos citados, sintaxe de todos os `.js`, referências dos HTML e elementos do DOM usados no JS. Não gera nada. |
 | `npm run empacotar` | Verifica e gera `public/downloads/postador-pro.zip`. |
 | `npm run empacotar:loja` | Gera `dist/postador-pro-loja.zip` (pacote da Chrome Web Store: manifest na raiz, sem a `key`; `dist/` fora do versionamento). Guia: `LOJA.md`. |
-| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (28 testes da API, vitest + pool do Workers). |
+| `npm run test:worker` | `cd worker && npm install` (uma vez) + `npm test` (35 testes da API, vitest + pool do Workers). |
 
 ## Ordem quando mexer na extensão
 
@@ -27,7 +27,7 @@ Sem isso, o cliente baixa uma versão antiga do zip (já aconteceu). Não versio
 
 - Um teste só: `node tests/<arquivo>.test.mjs` na raiz (usa `node:test` built-in).
 - Extensão: `npm test`.
-- Worker: `cd worker && npm install && npm test` (vitest run, atualmente 27 testes).
+- Worker: `cd worker && npm install && npm test` (vitest run, atualmente 35 testes).
 - Antes de mudar algo: `npm test` e `npm run verificar:extensao` devem passar.
 - Os testes da extensão usam DOM simulado. Publicação real em grupo do Facebook **não está verificada**; se o Facebook mudar o DOM, revisar seletores em `extensao/content/facebook.js`.
 - Pagamento real com InfinitePay e envio de e-mail também não estão verificados.
@@ -57,6 +57,7 @@ O cookie `SameSite` não atravessa `chrome-extension://`, então a extensão usa
 - `GET /api/extensao/planos` — público (preços e limites)
 - `GET /api/extensao/avaliacoes` — público (só as aprovadas, exibidas na janela "Avaliar ferramenta")
 - `POST /api/extensao/avaliacao` `{nota, comentario}` `Authorization: Bearer <token>`
+- `POST /api/extensao/gerar-textos` `{produto, beneficios, publico, link, tom, objetivo}` `Authorization: Bearer <token>` — gera 3 variações com o Workers AI (binding `AI`); cota `RATE_LIMIT_GERAR_TEXTOS` (10) por conta a cada 24 h; sem binding responde 503
 
 `EXTENSAO_IDS` (em `worker/wrangler.jsonc`) lista os IDs liberados. Hoje são dois: `aaegnkekaabiomfkpmpbhodliomgkdna` (instalação manual, zip do site) e `bcgeojfhaipebhjfadchndghefmkmjca` (Item ID da Chrome Web Store, rascunho criado em 17/10/2026). Somente `chrome-extension://<ID>` da lista passa na verificação de origem e recebe CORS. Não adicionar `*.workers.dev` nem `<all_urls>` a `host_permissions` do manifest — `npm run verificar:extensao` barra isso.
 
@@ -112,10 +113,11 @@ Contas de administrador (`ADMIN_EMAILS`: hoje `hdjlucas@gmail.com` e `aservicos1
 - Manifest V3: o Chrome encerra o service worker por inatividade; `chrome.alarms` só dispara com o navegador aberto. Agendamento depende do navegador ficar aberto (documentado na interface e nos termos).
 - A extensão armazena campanhas, textos, grupos e histórico **no navegador do cliente**, não no servidor. O servidor guarda apenas a conta do cliente (e-mail, nome, hash da senha, plano, vencimento, histórico de pagamento) e agora também o **contador de publicações diárias** (tabela `publicacoes_dia` no D1).
 - `info.md` tem credenciais de administrador e é **local apenas**; nunca commitar nem incluir no zip público.
-- Botão "Gerar 3 variações" desabilitado: a rota `POST /api/extensao/gerar-textos` não existe no worker (404). O botão foi desabilitado na interface com aviso claro para não gerar expectativa. Para reativar, implementar a rota no worker ou remover o aviso.
+- Botão "Gerar 3 variações" **ativo** (zip v1.0.54): a rota `POST /api/extensao/gerar-textos` usa a binding `AI` do Workers AI (sem chave externa, cota diária gratuita da Cloudflare). O modelo fica em `IA_MODEL` (`@cf/meta/llama-3.3-70b-instruct-fp8-fast` por padrão) e a cota por conta em `RATE_LIMIT_GERAR_TEXTOS` (10 a cada 24 h, no D1). Sem a binding, a rota responde 503 com aviso para escrever manualmente; a leitura da resposta tolera numeração/aspas e exige as três variações. Testes: `worker/test/ia.test.js` (parsing/pedido) e o caso de auth/validação/cota em `worker/test/api.test.js`.
 - `DIRETRIZES.md` no GitHub é uma versão antiga; este arquivo só chega a outras IAs se for commitado de propósito.
 - Rate limit de edge (`RL_GERAL`, `RL_WEBHOOK`) está **desligado** no `wrangler.jsonc` enquanto o Wrangler recusar o campo `ratelimits`. Até lá, o rate limit roda no D1 (tabela `rate_limits` + `security.limiteD1` nas rotas, incluindo `/publicacao`).
-- **Imagem: o transporte é base64.** O canal de mensagens do Chrome (`chrome.tabs.sendMessage`) só transporta JSON: ArrayBuffer/Blob chegam vazios do outro lado — era isso que causava o "Não é possível ler arquivo" do Facebook, e não bloqueio do navegador. O service worker converte os bytes para base64 (`bytesParaBase64`), o content script remonta o arquivo real (`base64ParaBytes` + `new File`) e injeta no compositor via `DataTransfer`. **Não voltar a enviar bytes crus por `sendMessage`.** O teste `imagem: base64 chega íntegro...` em `tests/facebook-content.test.mjs` trava essa regressão.
+- **Imagem: o transporte é base64.** O canal de mensagens do Chrome (`chrome.tabs.sendMessage`) só transporta JSON: ArrayBuffer/Blob chegam vazios do outro lado — era isso que causava o "Não é possível ler arquivo" do Facebook, e não bloqueio do navegador. O service worker converte os bytes para base64 (`extensao/lib/imagem.js`), o content script remonta o arquivo real (`base64ParaBytes` + `new File`) e injeta no compositor via `DataTransfer`. **Não voltar a enviar bytes crus por `sendMessage`.** O teste `imagem: base64 chega íntegro...` em `tests/facebook-content.test.mjs` trava essa regressão.
+- **Imagem: a cópia local vive no IndexedDB como bytes (ArrayBuffer), não como Blob.** O formato antigo guardava um Blob, que o Chrome pode liberar separadamente do registro (a imagem "sumia" no meio da campanha — caso de 18/10/2026). A leitura converte registros antigos na primeira vez (`buscarImagemDados`). Se a cópia realmente sumir, `prepararImagemParaEnvio` devolve `interromperFila: true` e a fila **pausa** em vez de queimar todos os destinos restantes (antes ela seguia e falhava 11 grupos seguidos). Teste: `tests/imagem-preparo.test.mjs`.
 - **Avaliar ferramenta:** o popup e as opções abrem `extensao/avaliar/avaliar.html` em janela própria (`chrome.windows.create`), sem sair da página. Nota 4 ou 5 entra **publicada direto** na listagem pública; nota 1 a 3 espera aprovação (`NOTA_PUBLICA_DIRETA` em `worker/src/routes/extensao.js`). A migração `0003` traz avaliações de exemplo (aparecem com etiqueta "exemplo" no painel; substituir/apagar quando houver reais). O painel admin tem a seção **"Avaliações"** (aprovar, ocultar, editar o texto e excluir, com cartão de pendentes no topo); o reenvio do cliente atualiza a avaliação e a devolve para revisão. Uma avaliação por conta. Os testes do worker usam armazenamento isolado por teste: cada teste precisa criar os próprios dados (a conta admin incluída).
 - Recuperação de senha por e-mail **não funciona em produção sem domínio próprio**: precisa de `npx wrangler email sending enable SEUDOMINIO`, binding `EMAIL` no `wrangler.jsonc`, `EMAIL_FROM` nas vars e `wrangler deploy`. Sem isso, o link vai só para o log e o admin redefini a senha pelo painel.
 - O botão "Agendar campanha" foi removido do rodapé do formulário. O agendamento se faz pelo checkbox "Agendar publicação": marcado, o botão principal vira "AGENDAR PUBLICAÇÃO" e salva para o horário escolhido; desmarcado, continua "INICIAR PUBLICAÇÃO" e publica na hora.

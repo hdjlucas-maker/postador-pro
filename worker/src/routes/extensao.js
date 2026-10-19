@@ -7,6 +7,8 @@ import * as security from '../security.js';
 import * as billing from '../billing.js';
 import * as log from '../log.js';
 import * as db from '../db.js';
+import * as ia from '../ia.js';
+import * as helpers from './helpers.js';
 
 // Rotas consumidas pela extensão. Aqui não entra campanha, imagem, destino nem
 // histórico: tudo isso vive no `chrome.storage` e no IndexedDB do navegador do
@@ -183,6 +185,36 @@ function criar() {
       contador: resultado.contador,
       restante: Math.max(0, limites.gruposPorDia - resultado.contador)
     });
+  });
+
+  // Gera três variações de mensagem com a IA da Cloudflare (binding `AI`).
+  // A conta precisa ter acesso válido (a avaliação conta) e a cota fica no D1:
+  // 10 gerações por conta a cada 24 h por padrão (`RATE_LIMIT_GERAR_TEXTOS`).
+  app.post('/gerar-textos', auth.exigirTokenComAcesso(), security.limiteD1('gerarTextos', {
+    chave: porConta,
+    mensagem: 'Você já usou as gerações de texto de hoje. Tente novamente amanhã ou escreva as mensagens manualmente.'
+  }), async c => {
+    const body = await c.req.json().catch(() => ({}));
+
+    const produto = helpers.texto(body.produto, 'o produto ou serviço', { max: 120 });
+    const beneficios = helpers.texto(body.beneficios, 'os benefícios', { obrigatorio: false, max: 500 });
+    const publico = helpers.texto(body.publico, 'o público', { obrigatorio: false, max: 160 });
+    const link = helpers.texto(body.link, 'o link', { obrigatorio: false, max: 300 });
+    if (link && !/^https?:\/\//i.test(link)) {
+      throw helpers.erroDeValidacao('O link precisa começar com http:// ou https://.');
+    }
+
+    const textos = await ia.gerarTextos(c.env, {
+      produto,
+      beneficios,
+      publico,
+      link,
+      tom: body.tom,
+      objetivo: body.objetivo
+    });
+
+    log.info('textos_gerados', { userId: c.get('user')._id, quantidade: textos.length });
+    return c.json({ textos });
   });
 
   // Avaliações exibidas na janela "Avaliar ferramenta". Público de propósito:

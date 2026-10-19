@@ -292,7 +292,7 @@ async function abrirForm(nova) {
   $('campo-ia-link').value = '';
   $('campo-ia-tom').value = 'amigavel';
   $('campo-ia-objetivo').value = 'link';
-  $('ia-status').textContent = 'Até 10 gerações por conta e 20 no total por dia. Não inclua dados pessoais.';
+  $('ia-status').textContent = 'Até 10 gerações por conta por dia. Não inclua dados pessoais.';
   if (nova) {
     campanhaEditando = null;
     $('campo-nome').value = '';
@@ -392,7 +392,20 @@ $('campo-imagem').addEventListener('change', async () => {
     return;
   }
   const id = `img_${Date.now()}`;
-  await armazenamento.salvarImagem(id, arquivo);
+  try {
+    // Guarda os bytes (ArrayBuffer), não o Blob: o Chrome pode liberar o
+    // armazenamento de blobs separadamente e a imagem "sumia" no meio da
+    // campanha. A prévia continua usando o File escolhido aqui.
+    await armazenamento.salvarImagem(id, {
+      bytes: await arquivo.arrayBuffer(),
+      tipo: arquivo.type,
+      nome: arquivo.name
+    });
+  } catch (erro) {
+    $('erro-form').textContent = `Não consegui guardar a imagem no navegador: ${erro.message || 'erro desconhecido'}.`;
+    $('erro-form').classList.remove('oculta');
+    return;
+  }
   imagemSelecionada = { id, blob: arquivo };
   $('miniatura').src = URL.createObjectURL(arquivo);
   $('preview-imagem').classList.remove('oculta');

@@ -280,7 +280,7 @@ async function limiteGeral(c) {
  * registrado e a requisição passa. Um rate limit indisponível não pode virar
  * indisponibilidade do produto; quem protege a conta é a trava de tentativas.
  */
-function limiteD1(nome, { max, janelaMs, chave } = {}) {
+function limiteD1(nome, { max, janelaMs, chave, mensagem } = {}) {
   return async function limit(c, next) {
     const cfg = configMod.config(c.env);
     const limite = max ?? cfg.RATE_LIMITS[nome] ?? 10;
@@ -292,7 +292,7 @@ function limiteD1(nome, { max, janelaMs, chave } = {}) {
       if (!resultado.permitido) {
         c.header('Retry-After', String(Math.max(1, Math.ceil(resultado.expiraEm - Date.now() / 1000))));
         log.warn('rate_limit', { limite: nome, path: new URL(c.req.url).pathname });
-        return c.json({ erro: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' }, 429);
+        return c.json({ erro: mensagem || 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' }, 429);
       }
     } catch (erro) {
       log.error('rate_limit_indisponivel', { limite: nome, erro: erro.message });

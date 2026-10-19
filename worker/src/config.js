@@ -67,6 +67,11 @@ function carregarConfig(env) {
     },
 
     PUBLIC_BASE_URL: String(env.PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
+
+    // Gerador de textos com a IA da Cloudflare (binding `AI`). O modelo fica
+    // numa var para trocar sem mexer no código; vazio usa o padrão de `ia.js`.
+    IA_MODEL: String(env.IA_MODEL || '').trim(),
+
     INFINITEPAY_HANDLE: String(env.INFINITEPAY_HANDLE || '').trim(),
     INFINITEPAY_API: env.INFINITEPAY_API || 'https://api.checkout.infinitepay.io',
 
@@ -97,7 +102,8 @@ function carregarConfig(env) {
       trocaSenha: num(env.RATE_LIMIT_TROCA_SENHA, 10),
       recuperar: num(env.RATE_LIMIT_RECUPERAR, 5),
       redefinir: num(env.RATE_LIMIT_REDEFINIR, 10),
-      excluirConta: num(env.RATE_LIMIT_EXCLUIR_CONTA, 5)
+      excluirConta: num(env.RATE_LIMIT_EXCLUIR_CONTA, 5),
+      gerarTextos: num(env.RATE_LIMIT_GERAR_TEXTOS, 10)
     },
 
     JANELAS_RATE_LIMIT: {
@@ -112,7 +118,9 @@ function carregarConfig(env) {
       checkout: 60 * 60 * 1000,
       reconciliar: 60 * 60 * 1000,
       avaliacoes: 15 * 60 * 1000,
-      avaliacao: 60 * 60 * 1000
+      avaliacao: 60 * 60 * 1000,
+      // Cota diária do gerador de textos com IA, por conta.
+      gerarTextos: 24 * 60 * 60 * 1000
     }
   };
 
@@ -148,6 +156,10 @@ function validarConfig(env) {
 
   if (!cfg.EXTENSAO_IDS.length) {
     avisos.push('EXTENSAO_IDS vazio: nenhuma extensão está autorizada a chamar a API. Preencha com o ID do manifest.');
+  }
+
+  if (!env.AI) {
+    avisos.push('Binding AI ausente: o gerador de textos com IA ficará indisponível.');
   }
 
   if (cfg.TOKEN_EXTENSAO_DIAS < 1 || cfg.TOKEN_EXTENSAO_DIAS > 365) {

@@ -43,6 +43,8 @@ export default defineWorkersConfig(async () => {
               // `wrangler.jsonc` e é medido à parte.
               PBKDF2_ITERACOES: '1000',
               IS_PROD: '0',
+              // Cota bem baixa no teste para exercitar o 429 sem 10 chamadas.
+              RATE_LIMIT_GERAR_TEXTOS: '2',
               // Sem binding de e-mail, a rota de recuperação só devolve o link
               // quando esta flag existe. Ela fica só aqui: em produção o link
               // nunca pode sair na resposta da API.

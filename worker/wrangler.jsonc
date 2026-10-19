@@ -41,6 +41,13 @@
     }
   ],
 
+  // IA da Cloudflare (Workers AI) para o "Gerar 3 variações" da extensão.
+  // Não exige chave externa nem cartão: a conta tem cota diária gratuita de
+  // neurônios. O modelo e a cota por conta ficam nas vars abaixo.
+  "ai": {
+    "binding": "AI"
+  },
+
   // Bucket de e-mail. Exige um domínio habilitado em Email Sending
   // (`npx wrangler email sending enable seudominio.com`), então só entra no
   // arquivo depois que isso existir. Sem o binding, a recuperação de senha cai
@@ -97,6 +104,10 @@
     "PBKDF2_ITERACOES": "100000",
     "PLAN_MONTHLY_PRICE": "2500",
     "PLAN_ANNUAL_PRICE": "24900",
+    // Gerador de textos com IA (Workers AI). O modelo pode ser trocado aqui
+    // sem mexer no código; vazio usa o padrão de `src/ia.js`.
+    "IA_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "RATE_LIMIT_GERAR_TEXTOS": "10",
     "LIMIT_TRIAL_GRUPOS_DIA": "5",
     "LIMIT_TRIAL_CAMPANHAS": "3",
     "LIMIT_TRIAL_DESTINOS": "5",

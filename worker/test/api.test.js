@@ -310,6 +310,34 @@ describe('API do Postador Pro sobre Workers + D1', () => {
     expect(bloqueado.status).toBe(401);
   });
 
+  it('gerador de textos exige conta com acesso, valida o pedido e respeita a cota diária', async () => {
+    // Sem token a rota nem chega no rate limit.
+    const semToken = await post('/api/extensao/gerar-textos', { produto: 'Curso de violão' }, { Origin: ORIGEM });
+    expect(semToken.status).toBe(401);
+
+    const email = novoEmail();
+    const cadastro = await post('/api/extensao/cadastro', {
+      nome: 'Teste IA', email, senha: 'senha-super-segura'
+    }, { Origin: ORIGEM });
+    const { token } = await cadastro.json();
+    const cabecalhos = { Origin: ORIGEM, Authorization: `Bearer ${token}` };
+
+    // O produto é obrigatório e a validação acontece antes de chamar a IA.
+    const semProduto = await post('/api/extensao/gerar-textos', { produto: '   ' }, cabecalhos);
+    expect(semProduto.status).toBe(400);
+    expect((await semProduto.json()).erro).toMatch(/produto ou serviço/i);
+
+    // Cada tentativa autenticada consome a cota (como nas demais rotas com
+    // limite no D1). A cota de teste é 2 por conta/24 h, definida em
+    // RATE_LIMIT_GERAR_TEXTOS no vitest.config.mjs.
+    const segunda = await post('/api/extensao/gerar-textos', { produto: '   ' }, cabecalhos);
+    expect(segunda.status).toBe(400);
+
+    const estourou = await post('/api/extensao/gerar-textos', { produto: 'Curso de violão' }, cabecalhos);
+    expect(estourou.status).toBe(429);
+    expect((await estourou.json()).erro).toMatch(/gerações de texto de hoje/);
+  });
+
   it('conta de administrador nunca expira: avaliação vencida continua valendo como Pro', async () => {
     // `segundo@postador.pro` vem da lista `ADMIN_EMAILS` do vitest.config.mjs,
     // que tem dois e-mails separados por vírgula, como a produção.
